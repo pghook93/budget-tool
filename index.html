@@ -879,6 +879,7 @@ document.getElementById('pdfUpload').addEventListener('change', async (e) => {
     document.getElementById('searchBox').value = '';
     render();
     updateEvaluateButtonState();
+    if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
     setUploadStatus(`Extracted ${newRows.length} asks from "${file.name}". Now upload budget documents (BP2, PBS) in Step 2 and click "Evaluate all asks" in Step 3.`, 'ok');
   } catch (err) {
     console.error(err);
@@ -898,6 +899,7 @@ document.getElementById('resetToAcossBtn').addEventListener('click', () => {
   render();
   setUploadStatus('Showing ACOSS 2025-26 pre-budget submission (sample data).', '');
   updateEvaluateButtonState();
+  if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
 });
 
 // ============================================================================
@@ -944,6 +946,7 @@ document.getElementById('budgetUpload').addEventListener('change', async (e) => 
     const summary = budgetDocs.map(d => `${d.name} (${d.pages.length}p, ${d.totalChars.toLocaleString()} chars)`).join('; ');
     setBudgetStatus(`Loaded ${budgetDocs.length} budget doc${budgetDocs.length === 1 ? '' : 's'}: ${summary}`, 'ok');
     updateEvaluateButtonState();
+    if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
   } catch (err) {
     console.error(err);
     setBudgetStatus(`Budget upload failed: ${err.message}`, 'error');
@@ -956,6 +959,7 @@ document.getElementById('clearBudgetBtn').addEventListener('click', () => {
   budgetDocs.length = 0;
   setBudgetStatus('No budget documents loaded yet. Upload BP2 and relevant PBS files to enable evaluation.', '');
   updateEvaluateButtonState();
+  if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
 });
 
 function buildBudgetCorpus() {
