@@ -141,10 +141,26 @@
     <p class="lede">Every ask is a verbatim recommendation from the uploaded pre-budget submission. Overarching categories are the submission's own chapter headings. Click any row for the detail, supporting quotes, and budget response.</p>
 
     <div class="upload-row">
+      <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700;width:100%;margin-bottom:.25rem">Step 1 · Submission</div>
       <label class="btn primary" for="pdfUpload">Upload submission PDF</label>
       <input type="file" id="pdfUpload" accept="application/pdf,.pdf" />
       <button type="button" class="btn" id="resetToAcossBtn">Reset to ACOSS sample</button>
       <span class="upload-status" id="uploadStatus">Showing ACOSS 2025-26 pre-budget submission (sample data).</span>
+    </div>
+
+    <div class="upload-row" style="background:#fff6ec;border-color:#e8d7be">
+      <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700;width:100%;margin-bottom:.25rem">Step 2 · Budget documents</div>
+      <label class="btn primary" for="budgetUpload">Upload budget PDFs (BP2, PBS)</label>
+      <input type="file" id="budgetUpload" accept="application/pdf,.pdf" multiple />
+      <button type="button" class="btn" id="clearBudgetBtn">Clear budget docs</button>
+      <span class="upload-status" id="budgetStatus">No budget documents loaded yet. Upload BP2 and relevant PBS files to enable evaluation.</span>
+    </div>
+
+    <div class="upload-row" style="background:#f0f4ef;border-color:#cfd9cb">
+      <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700;width:100%;margin-bottom:.25rem">Step 3 · Evaluate</div>
+      <button type="button" class="btn primary" id="evaluateBtn" disabled>Evaluate all asks against budget</button>
+      <button type="button" class="btn" id="stopEvalBtn" style="display:none">Stop</button>
+      <span class="upload-status" id="evalStatus">Upload a submission and budget docs to enable evaluation.</span>
     </div>
 
     <div class="toolbar">
@@ -580,7 +596,7 @@ function openModal(id) {
           </div>
           <div class="quote">${escapeHtml(e.quote)}</div>
           <p style="margin:.3rem 0 .5rem;font-size:var(--text-sm);color:var(--text-muted)">${escapeHtml(e.note)}</p>
-          <a href="${escapeHtml(e.anchor)}" target="_blank" rel="noopener noreferrer">Open source →</a>
+          ${e.anchor ? `<a href="${escapeHtml(e.anchor)}" target="_blank" rel="noopener noreferrer">Open source →</a>` : ''}
         </article>
       `).join('')}
     </div>`,
@@ -805,7 +821,8 @@ document.getElementById('pdfUpload').addEventListener('change', async (e) => {
     state.selectedId = null;
     document.getElementById('searchBox').value = '';
     render();
-    setUploadStatus(`Extracted ${newRows.length} asks from "${file.name}". All rows start as "Not evidenced" — add budget evidence to update.`, 'ok');
+    updateEvaluateButtonState();
+    setUploadStatus(`Extracted ${newRows.length} asks from "${file.name}". Now upload budget documents (BP2, PBS) in Step 2 and click "Evaluate all asks" in Step 3.`, 'ok');
   } catch (err) {
     console.error(err);
     setUploadStatus(`Upload failed: ${err.message}`, 'error');
@@ -823,8 +840,222 @@ document.getElementById('resetToAcossBtn').addEventListener('click', () => {
   document.getElementById('searchBox').value = '';
   render();
   setUploadStatus('Showing ACOSS 2025-26 pre-budget submission (sample data).', '');
+  updateEvaluateButtonState();
 });
 
+// ============================================================================
+// Stage 2: Budget document upload + ask-by-ask evaluation
+// ============================================================================
+const budgetDocs = []; // [{ name, pages: [{page, text}], totalChars }]
+let evalAbortController = null;
+
+function setBudgetStatus(msg, kind) {
+  const el = document.getElementById('budgetStatus');
+  el.className = 'upload-status' + (kind ? ' ' + kind : '');
+  el.textContent = msg;
+}
+function setEvalStatus(msg, kind) {
+  const el = document.getElementById('evalStatus');
+  el.className = 'upload-status' + (kind ? ' ' + kind : '');
+  el.textContent = msg;
+}
+
+function updateEvaluateButtonState() {
+  const btn = document.getElementById('evaluateBtn');
+  const hasRows = rows.length > 0;
+  const hasBudget = budgetDocs.length > 0;
+  btn.disabled = !(hasRows && hasBudget);
+  if (!hasRows) setEvalStatus('Upload or keep the sample submission to enable evaluation.', '');
+  else if (!hasBudget) setEvalStatus('Upload at least one budget document (BP2 or PBS) to enable evaluation.', '');
+  else setEvalStatus(`Ready to evaluate ${rows.length} asks against ${budgetDocs.length} budget document${budgetDocs.length === 1 ? '' : 's'}.`, 'ok');
+}
+
+document.getElementById('budgetUpload').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files || []);
+  if (!files.length) return;
+  try {
+    setBudgetStatus(`Reading ${files.length} budget PDF${files.length === 1 ? '' : 's'}…`, 'working');
+    for (const file of files) {
+      setBudgetStatus(`Parsing "${file.name}"…`, 'working');
+      const pages = await extractPdfText(file);
+      const totalChars = pages.reduce((n, p) => n + p.text.length, 0);
+      // Replace any existing doc with same name
+      const idx = budgetDocs.findIndex(d => d.name === file.name);
+      const doc = { name: file.name, pages, totalChars };
+      if (idx >= 0) budgetDocs[idx] = doc; else budgetDocs.push(doc);
+    }
+    const summary = budgetDocs.map(d => `${d.name} (${d.pages.length}p, ${d.totalChars.toLocaleString()} chars)`).join('; ');
+    setBudgetStatus(`Loaded ${budgetDocs.length} budget doc${budgetDocs.length === 1 ? '' : 's'}: ${summary}`, 'ok');
+    updateEvaluateButtonState();
+  } catch (err) {
+    console.error(err);
+    setBudgetStatus(`Budget upload failed: ${err.message}`, 'error');
+  } finally {
+    e.target.value = '';
+  }
+});
+
+document.getElementById('clearBudgetBtn').addEventListener('click', () => {
+  budgetDocs.length = 0;
+  setBudgetStatus('No budget documents loaded yet. Upload BP2 and relevant PBS files to enable evaluation.', '');
+  updateEvaluateButtonState();
+});
+
+function buildBudgetCorpus() {
+  // Concatenate all uploaded budget docs, labelled, with page markers.
+  return budgetDocs.map(d => {
+    const body = d.pages.map(p => `=== ${d.name} · PAGE ${p.page} ===\n${p.text}`).join('\n\n');
+    return body;
+  }).join('\n\n========================================\n\n');
+}
+
+function buildEvaluationPrompt(ask, overarching, corpus) {
+  return `You are evaluating whether an Australian Federal Budget has delivered on a specific recommendation from a pre-budget submission.
+
+RECOMMENDATION (verbatim):
+"${ask}"
+
+OVERARCHING THEME (from the submission):
+"${overarching}"
+
+BUDGET EVIDENCE (verbatim text from uploaded budget documents, with document name and page markers):
+${corpus}
+
+Return ONLY a JSON object matching this schema exactly:
+{
+  "status": "Directly funded" | "Partially reflected" | "Adjacent / indirect" | "Not evidenced",
+  "evidenceQuality": "Strong evidence" | "Medium evidence" | "Weak evidence",
+  "plainIssue": "1-2 sentence plain-English summary of how the budget aligns (or doesn't) with this ask, naming specific measures and dollar figures where possible",
+  "rule": "1-2 sentence justification citing the specific measure(s) from the budget docs, with dollar figures and scope",
+  "evidenceQualityRationale": "1 sentence explaining why the evidence quality rating was given",
+  "evidenceItems": [
+    {
+      "source": "document name (use the exact doc name from the === markers)",
+      "pdfPage": "page number as string",
+      "identifier": "short measure title with dollar figure if applicable",
+      "quote": "verbatim excerpt from the budget text (1-3 sentences max)",
+      "note": "1 sentence explaining how this relates to the ask"
+    }
+  ]
+}
+
+Status definitions:
+- "Directly funded": budget contains a named measure that matches this ask in scope, mechanism, and roughly the scale requested.
+- "Partially reflected": budget contains a named measure that addresses part of this ask (smaller scale, narrower cohort, extension rather than expansion, etc).
+- "Adjacent / indirect": budget contains measures that address the same problem area but not the specific ask (different mechanism, different cohort, or cost-of-living relief rather than the structural change sought).
+- "Not evidenced": nothing in the uploaded budget documents addresses this ask.
+
+Evidence quality definitions:
+- "Strong evidence": one or more named measures directly quoted with dollar figures and clear match to the ask's domain.
+- "Medium evidence": named measure(s) found but scale, scope or mechanism requires interpretation.
+- "Weak evidence": no direct measure found; only adjacent or indirect evidence.
+
+Rules:
+- Only cite evidence you can quote verbatim from the BUDGET EVIDENCE text above. Do not invent measures.
+- If nothing addresses the ask, return status "Not evidenced", evidenceQuality "Weak evidence", and an empty evidenceItems array.
+- quote must be a verbatim snippet from the budget text, not a paraphrase.
+- Return ONLY the JSON object. No prose, no code fences.`;
+}
+
+async function evaluateOneAsk(row, corpus, signal) {
+  const prompt = buildEvaluationPrompt(row.ask, row.overarching, corpus);
+  const body = {
+    contents: [{ role: 'user', parts: [{ text: prompt }] }],
+    generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
+  };
+  const res = await fetch(GEMINI_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+    signal
+  });
+  if (!res.ok) {
+    const errText = await res.text().catch(() => '');
+    throw new Error(`Worker ${res.status}: ${errText.slice(0, 200)}`);
+  }
+  const data = await res.json();
+  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+  if (!text) {
+    const finish = data?.candidates?.[0]?.finishReason || 'unknown';
+    throw new Error(`Empty response (${finish})`);
+  }
+  let parsed;
+  try { parsed = JSON.parse(text); }
+  catch (e) {
+    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+    parsed = JSON.parse(cleaned);
+  }
+  return parsed;
+}
+
+function applyEvaluationToRow(row, result) {
+  const validStatuses = ['Directly funded','Partially reflected','Adjacent / indirect','Not evidenced'];
+  const validEv = ['Strong evidence','Medium evidence','Weak evidence'];
+  row.status = validStatuses.includes(result.status) ? result.status : 'Not evidenced';
+  row.evidenceQuality = validEv.includes(result.evidenceQuality) ? result.evidenceQuality : 'Weak evidence';
+  row.plainIssue = String(result.plainIssue || row.plainIssue).trim();
+  row.rule = String(result.rule || row.rule).trim();
+  row.evidenceQualityRationale = String(result.evidenceQualityRationale || '').trim();
+  row.evidenceItems = Array.isArray(result.evidenceItems) ? result.evidenceItems.map(e => ({
+    source: String(e.source || '').trim(),
+    pdfPage: String(e.pdfPage || '').trim(),
+    printedPage: '',
+    anchor: '',
+    identifier: String(e.identifier || '').trim(),
+    quote: String(e.quote || '').trim(),
+    note: String(e.note || '').trim()
+  })) : [];
+}
+
+document.getElementById('evaluateBtn').addEventListener('click', async () => {
+  if (!rows.length || !budgetDocs.length) return;
+  const btn = document.getElementById('evaluateBtn');
+  const stopBtn = document.getElementById('stopEvalBtn');
+  btn.disabled = true;
+  stopBtn.style.display = '';
+  evalAbortController = new AbortController();
+  const signal = evalAbortController.signal;
+  const corpus = buildBudgetCorpus();
+  const totalChars = corpus.length;
+  setEvalStatus(`Starting evaluation of ${rows.length} asks against ${totalChars.toLocaleString()} chars of budget text…`, 'working');
+
+  // Run sequentially to stay well under the Worker/Gemini rate-limits for big prompts.
+  let done = 0, failed = 0;
+  const startedAt = Date.now();
+  for (const row of rows) {
+    if (signal.aborted) break;
+    try {
+      const elapsed = Math.round((Date.now() - startedAt) / 1000);
+      setEvalStatus(`Evaluating ${done + 1}/${rows.length}: "${row.ask.slice(0, 80)}…" · ${elapsed}s elapsed`, 'working');
+      const result = await evaluateOneAsk(row, corpus, signal);
+      applyEvaluationToRow(row, result);
+      done++;
+      render();
+    } catch (err) {
+      if (err.name === 'AbortError') break;
+      console.error('Evaluation failed for row', row.id, err);
+      failed++;
+      done++;
+    }
+  }
+  stopBtn.style.display = 'none';
+  btn.disabled = false;
+  const totalElapsed = Math.round((Date.now() - startedAt) / 1000);
+  if (signal.aborted) {
+    setEvalStatus(`Stopped after ${done} of ${rows.length} asks (${totalElapsed}s). ${failed} failed.`, 'error');
+  } else if (failed) {
+    setEvalStatus(`Evaluation complete in ${totalElapsed}s · ${done - failed} succeeded, ${failed} failed (check console).`, 'error');
+  } else {
+    setEvalStatus(`Evaluation complete in ${totalElapsed}s · all ${done} asks evaluated.`, 'ok');
+  }
+  evalAbortController = null;
+});
+
+document.getElementById('stopEvalBtn').addEventListener('click', () => {
+  if (evalAbortController) evalAbortController.abort();
+});
+
+updateEvaluateButtonState();
 render();
 </script>
 </body>
