@@ -1071,34 +1071,56 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   const totalChars = corpus.length;
   setEvalStatus(`Starting evaluation of ${rows.length} asks against ${totalChars.toLocaleString()} chars of budget text…`, 'working');
 
+  // Only evaluate rows that haven't been successfully evaluated yet — so re-clicking
+  // Evaluate picks up any that failed or were skipped previously.
+  const pendingRows = rows.filter(r => r.verdict === 'Not yet evaluated');
+  const alreadyDone = rows.length - pendingRows.length;
+  if (!pendingRows.length) {
+    setEvalStatus(`All ${rows.length} asks are already evaluated. Clear individual verdicts to re-run.`, 'ok');
+    btn.disabled = false;
+    stopBtn.style.display = 'none';
+    return;
+  }
+  if (alreadyDone) {
+    setEvalStatus(`Resuming: evaluating ${pendingRows.length} unevaluated asks (${alreadyDone} already done)…`, 'working');
+  }
+
   // Run sequentially to stay well under the Worker/Gemini rate-limits for big prompts.
-  let done = 0, failed = 0;
+  let succeeded = 0, failed = 0, processed = 0;
+  const failures = []; // [{ ask, reason }]
   const startedAt = Date.now();
-  for (const row of rows) {
-    if (signal.aborted) break;
+  for (const row of pendingRows) {
+    if (signal.aborted) break; // only true if user clicked Stop
+    processed++;
     try {
       const elapsed = Math.round((Date.now() - startedAt) / 1000);
-      setEvalStatus(`Evaluating ${done + 1}/${rows.length}: "${row.ask.slice(0, 80)}…" · ${elapsed}s elapsed`, 'working');
+      setEvalStatus(`Evaluating ${processed}/${pendingRows.length}: "${row.ask.slice(0, 80)}…" · ${elapsed}s elapsed`, 'working');
       const result = await evaluateOneAsk(row, corpus, signal);
       applyEvaluationToRow(row, result);
-      done++;
+      succeeded++;
       render();
     } catch (err) {
-      if (err.name === 'AbortError') break;
+      // Only honour user-initiated abort — server timeouts / dropped fetches also throw AbortError
+      // but we should keep going to the next ask rather than silently bail.
+      if (err.name === 'AbortError' && signal.aborted) break;
       console.error('Evaluation failed for row', row.id, err);
       failed++;
-      done++;
+      failures.push({ ask: row.ask.slice(0, 80), reason: err.name === 'AbortError' ? 'connection dropped / timeout' : (err.message || 'unknown error') });
     }
   }
   stopBtn.style.display = 'none';
   btn.disabled = false;
   const totalElapsed = Math.round((Date.now() - startedAt) / 1000);
+  const skipped = pendingRows.length - processed;
+  const totalEvaluated = rows.filter(r => r.verdict !== 'Not yet evaluated').length;
   if (signal.aborted) {
-    setEvalStatus(`Stopped after ${done} of ${rows.length} asks (${totalElapsed}s). ${failed} failed.`, 'error');
+    setEvalStatus(`Stopped after ${processed} of ${pendingRows.length} in this run (${totalElapsed}s) · ${succeeded} succeeded, ${failed} failed, ${skipped} not started. ${rows.length - totalEvaluated} still unevaluated — click Evaluate to resume.`, 'error');
   } else if (failed) {
-    setEvalStatus(`Evaluation complete in ${totalElapsed}s · ${done - failed} succeeded, ${failed} failed (check console).`, 'error');
+    const reasons = failures.map(f => `• "${f.ask}…" — ${f.reason}`).join('\n');
+    console.warn('Evaluation failures:\n' + reasons);
+    setEvalStatus(`Done in ${totalElapsed}s · ${succeeded}/${pendingRows.length} succeeded, ${failed} failed (see console). ${totalEvaluated}/${rows.length} asks now evaluated — click Evaluate again to retry the failures.`, 'error');
   } else {
-    setEvalStatus(`Evaluation complete in ${totalElapsed}s · all ${done} asks evaluated.`, 'ok');
+    setEvalStatus(`Evaluation complete in ${totalElapsed}s · all ${rows.length} asks evaluated.`, 'ok');
   }
   evalAbortController = null;
 });
