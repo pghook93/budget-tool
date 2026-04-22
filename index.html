@@ -59,6 +59,7 @@
   .status-partial{background:rgba(150,66,25,.12);color:var(--warning)}
   .status-adjacent{background:rgba(0,100,148,.12);color:var(--blue)}
   .status-missed{background:rgba(161,53,68,.12);color:var(--error)}
+  .status-unclear{background:rgba(95,101,102,.14);color:var(--text-muted)}
   .review-ready{background:rgba(67,122,34,.12);color:var(--success)}
   .review-checking{background:rgba(150,66,25,.12);color:var(--warning)}
 
@@ -138,7 +139,7 @@
 
   <section class="card card-pad">
     <h1>Ask register</h1>
-    <p class="lede">Every ask is a verbatim recommendation from the uploaded pre-budget submission. Overarching categories are the submission's own chapter headings. Click any row for the detail, supporting quotes, and budget response.</p>
+    <p class="lede">Upload a pre-budget submission, then one or more budget documents. The tool extracts each recommendation verbatim, then evaluates whether the budget reflects it. Click any row for the full justification and supporting quotes.</p>
 
     <div class="upload-row">
       <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700;width:100%;margin-bottom:.25rem">Step 1 · Submission</div>
@@ -180,11 +181,8 @@
             <th class="col-ask">Ask (verbatim)
               <select data-col="ask"><option value="All">All</option></select>
             </th>
-            <th class="col-status-short">Budget response
-              <select data-col="status"><option value="All">All</option></select>
-            </th>
-            <th class="col-evidence">Evidence
-              <select data-col="evidenceQuality"><option value="All">All</option></select>
+            <th class="col-status-short">Verdict
+              <select data-col="verdict"><option value="All">All</option></select>
             </th>
             <th class="col-page">Page
               <select data-col="pageGroup"><option value="All">All</option></select>
@@ -473,7 +471,7 @@ const ACOSS_SAMPLE_ROWS = [
 // Filter state + helpers
 // ============================================================================
 const state = {
-  filters: { overarching:'All', ask:'All', status:'All', evidenceQuality:'All', pageGroup:'All' },
+  filters: { overarching:'All', ask:'All', verdict:'All', pageGroup:'All' },
   search: '',
   selectedId: null
 };
@@ -486,17 +484,31 @@ function pageGroupFor(p) {
   if (n <= 30) return 'Pages 21–30';
   return 'Pages 31+';
 }
+// Map old status vocabulary to new verdict vocabulary (for the hand-curated sample rows).
+function migrateSampleToVerdict(row) {
+  if (row.verdict) return row;
+  const s = row.status;
+  if (s === 'Directly funded') row.verdict = 'Directly reflected';
+  else if (s === 'Partially reflected') row.verdict = 'Partially reflected';
+  else if (s === 'Adjacent / indirect') row.verdict = 'Adjacent';
+  else if (s === 'Not evidenced') row.verdict = 'Not reflected';
+  else row.verdict = 'Not reflected';
+  return row;
+}
+ACOSS_SAMPLE_ROWS.forEach(migrateSampleToVerdict);
+
 let rows = ACOSS_SAMPLE_ROWS.slice();
 function recomputePageGroups() { rows.forEach(r => { r.pageGroup = pageGroupFor(r.askPage); }); }
 recomputePageGroups();
 
-function statusClass(s) {
-  if (s === 'Directly funded') return 'status-direct';
-  if (s === 'Partially reflected') return 'status-partial';
-  if (s === 'Adjacent / indirect') return 'status-adjacent';
-  return 'status-missed';
+function verdictClass(v) {
+  if (v === 'Directly reflected') return 'status-direct';
+  if (v === 'Partially reflected') return 'status-partial';
+  if (v === 'Adjacent') return 'status-adjacent';
+  if (v === 'Unclear') return 'status-unclear';
+  if (v === 'Not yet evaluated') return 'status-unclear';
+  return 'status-missed'; // Not reflected
 }
-function reviewClass(s) { return s === 'Review ready' ? 'review-ready' : 'review-checking'; }
 
 function uniq(arr) { return Array.from(new Set(arr)).sort(); }
 
@@ -529,7 +541,7 @@ function filteredRows() {
       if (state.filters[col] !== 'All' && r[col] !== state.filters[col]) return false;
     }
     if (!q) return true;
-    const hay = [r.overarching, r.ask, r.status, r.plainIssue, r.rule,
+    const hay = [r.overarching, r.ask, r.verdict, r.plainIssue, r.rule,
       ...(r.evidenceItems || []).flatMap(e => [e.quote, e.note, e.identifier, e.source])]
       .join(' ').toLowerCase();
     return hay.includes(q);
@@ -545,14 +557,13 @@ function render() {
   const body = document.getElementById('tableBody');
 
   if (!data.length) {
-    body.innerHTML = '<tr><td colspan="5" style="text-align:center;color:var(--text-muted);padding:2rem">No asks match the current filters.</td></tr>';
+    body.innerHTML = '<tr><td colspan="4" style="text-align:center;color:var(--text-muted);padding:2rem">No asks match the current filters.</td></tr>';
   } else {
     body.innerHTML = data.map(r => `
       <tr data-id="${r.id}"${state.selectedId === r.id ? ' class="selected"' : ''}>
         <td class="cell-overarching">${escapeHtml(r.overarching)}</td>
         <td class="cell-ask">${escapeHtml(r.ask)}</td>
-        <td class="col-status-short"><span class="pill ${statusClass(r.status)}">${escapeHtml(r.status)}</span></td>
-        <td>${escapeHtml(r.evidenceQuality)}</td>
+        <td class="col-status-short"><span class="pill ${verdictClass(r.verdict)}">${escapeHtml(r.verdict)}</span></td>
         <td class="cell-page">p. ${escapeHtml(r.askPage)}</td>
       </tr>
     `).join('');
@@ -584,7 +595,7 @@ function openModal(id) {
       <p>${escapeHtml(row.plainIssue)}</p>
     </div>`,
     `<div class="detail-box">
-      <span class="pill ${statusClass(row.status)}" style="margin-bottom:.5rem;display:inline-block">${escapeHtml(row.status)}</span>
+      <span class="pill ${verdictClass(row.verdict)}" style="margin-bottom:.5rem;display:inline-block">${escapeHtml(row.verdict)}</span>
       <p>${escapeHtml(row.rule)}</p>
       ${(row.evidenceItems || []).map(e => `
         <article class="evidence-card">
@@ -599,10 +610,6 @@ function openModal(id) {
           ${e.anchor ? `<a href="${escapeHtml(e.anchor)}" target="_blank" rel="noopener noreferrer">Open source →</a>` : ''}
         </article>
       `).join('')}
-    </div>`,
-    `<div class="detail-box">
-      <span class="pill" style="margin-bottom:.5rem;display:inline-block">${escapeHtml(row.evidenceQuality)}</span>
-      <p>${escapeHtml(row.evidenceQualityRationale || '')}</p>
     </div>`
   ].join('');
 
@@ -642,11 +649,12 @@ document.getElementById('resetBtn').addEventListener('click', () => {
 });
 
 document.getElementById('downloadCsv').addEventListener('click', () => {
-  const headers = ['id','overarching_category','ask_verbatim','ask_page','budget_impact_sought','budget_response','evidence_quality','plain_english','justification','evidence_source','evidence_printed_page','evidence_pdf_page','evidence_identifier','evidence_quote','evidence_note','evidence_link'];
+  const headers = ['id','overarching_category','ask_verbatim','ask_page','verdict','plain_english','justification','evidence_source','evidence_pdf_page','evidence_identifier','evidence_quote','evidence_note'];
   const lines = [headers.join(',')];
   rows.forEach(r => {
-    (r.evidenceItems || []).forEach(e => {
-      const vals = [r.id, r.overarching, r.ask, r.askPage, r.budgetImpact, r.status, r.evidenceQuality, r.plainIssue, r.rule, e.source, e.printedPage, e.pdfPage, e.identifier, e.quote, e.note, e.anchor]
+    const items = (r.evidenceItems && r.evidenceItems.length) ? r.evidenceItems : [{}];
+    items.forEach(e => {
+      const vals = [r.id, r.overarching, r.ask, r.askPage, r.verdict, r.plainIssue, r.rule, e.source, e.pdfPage, e.identifier, e.quote, e.note]
         .map(v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"');
       lines.push(vals.join(','));
     });
@@ -788,11 +796,9 @@ function rowsFromExtraction(extracted) {
     overarching: String(r.overarching || 'Uncategorised').trim(),
     ask: String(r.ask || '').trim(),
     askPage: String(r.askPage || '').trim(),
-    status: 'Not evidenced',
-    evidenceQuality: 'Weak evidence',
-    plainIssue: 'No budget-response analysis has been run against this ask yet. Upload or curate evidence to assess alignment with the relevant budget papers.',
-    rule: 'Awaiting review. This ask has been extracted from the uploaded submission but has not yet been checked against budget measures.',
-    evidenceQualityRationale: 'No budget evidence has been collected against this ask yet.',
+    verdict: 'Not yet evaluated',
+    plainIssue: 'No budget-response analysis has been run against this ask yet. Upload budget documents and click "Evaluate all asks" to assess alignment.',
+    rule: 'Awaiting evaluation. This ask has been extracted from the uploaded submission but has not yet been checked against any budget document.',
     evidenceItems: []
   }));
 }
@@ -816,7 +822,7 @@ document.getElementById('pdfUpload').addEventListener('change', async (e) => {
     }
     rows = newRows;
     recomputePageGroups();
-    state.filters = { overarching:'All', ask:'All', status:'All', evidenceQuality:'All', pageGroup:'All' };
+    state.filters = { overarching:'All', ask:'All', verdict:'All', pageGroup:'All' };
     state.search = '';
     state.selectedId = null;
     document.getElementById('searchBox').value = '';
@@ -834,7 +840,7 @@ document.getElementById('pdfUpload').addEventListener('change', async (e) => {
 document.getElementById('resetToAcossBtn').addEventListener('click', () => {
   rows = ACOSS_SAMPLE_ROWS.slice();
   recomputePageGroups();
-  state.filters = { overarching:'All', ask:'All', status:'All', evidenceQuality:'All', pageGroup:'All' };
+  state.filters = { overarching:'All', ask:'All', verdict:'All', pageGroup:'All' };
   state.search = '';
   state.selectedId = null;
   document.getElementById('searchBox').value = '';
@@ -923,11 +929,9 @@ ${corpus}
 
 Return ONLY a JSON object matching this schema exactly:
 {
-  "status": "Directly funded" | "Partially reflected" | "Adjacent / indirect" | "Not evidenced",
-  "evidenceQuality": "Strong evidence" | "Medium evidence" | "Weak evidence",
+  "verdict": "Directly reflected" | "Partially reflected" | "Adjacent" | "Not reflected" | "Unclear",
   "plainIssue": "1-2 sentence plain-English summary of how the budget aligns (or doesn't) with this ask, naming specific measures and dollar figures where possible",
   "rule": "1-2 sentence justification citing the specific measure(s) from the budget docs, with dollar figures and scope",
-  "evidenceQualityRationale": "1 sentence explaining why the evidence quality rating was given",
   "evidenceItems": [
     {
       "source": "document name (use the exact doc name from the === markers)",
@@ -939,20 +943,16 @@ Return ONLY a JSON object matching this schema exactly:
   ]
 }
 
-Status definitions:
-- "Directly funded": budget contains a named measure that matches this ask in scope, mechanism, and roughly the scale requested.
+Verdict definitions:
+- "Directly reflected": budget contains a named measure that matches this ask in scope, mechanism, and roughly the scale requested. Use this only when the match is strong and unambiguous.
 - "Partially reflected": budget contains a named measure that addresses part of this ask (smaller scale, narrower cohort, extension rather than expansion, etc).
-- "Adjacent / indirect": budget contains measures that address the same problem area but not the specific ask (different mechanism, different cohort, or cost-of-living relief rather than the structural change sought).
-- "Not evidenced": nothing in the uploaded budget documents addresses this ask.
-
-Evidence quality definitions:
-- "Strong evidence": one or more named measures directly quoted with dollar figures and clear match to the ask's domain.
-- "Medium evidence": named measure(s) found but scale, scope or mechanism requires interpretation.
-- "Weak evidence": no direct measure found; only adjacent or indirect evidence.
+- "Adjacent": budget contains measures that address the same problem area but not the specific ask (different mechanism, different cohort, or cost-of-living relief rather than the structural change sought).
+- "Not reflected": nothing in the uploaded budget documents addresses this ask.
+- "Unclear": evidence exists but scope, mechanism or scale cannot be clearly reconciled with the ask without further review. Use sparingly — prefer one of the four above whenever the call is defensible.
 
 Rules:
 - Only cite evidence you can quote verbatim from the BUDGET EVIDENCE text above. Do not invent measures.
-- If nothing addresses the ask, return status "Not evidenced", evidenceQuality "Weak evidence", and an empty evidenceItems array.
+- If nothing addresses the ask, return verdict "Not reflected" and an empty evidenceItems array.
 - quote must be a verbatim snippet from the budget text, not a paraphrase.
 - Return ONLY the JSON object. No prose, no code fences.`;
 }
@@ -989,13 +989,10 @@ async function evaluateOneAsk(row, corpus, signal) {
 }
 
 function applyEvaluationToRow(row, result) {
-  const validStatuses = ['Directly funded','Partially reflected','Adjacent / indirect','Not evidenced'];
-  const validEv = ['Strong evidence','Medium evidence','Weak evidence'];
-  row.status = validStatuses.includes(result.status) ? result.status : 'Not evidenced';
-  row.evidenceQuality = validEv.includes(result.evidenceQuality) ? result.evidenceQuality : 'Weak evidence';
+  const validVerdicts = ['Directly reflected','Partially reflected','Adjacent','Not reflected','Unclear'];
+  row.verdict = validVerdicts.includes(result.verdict) ? result.verdict : 'Unclear';
   row.plainIssue = String(result.plainIssue || row.plainIssue).trim();
   row.rule = String(result.rule || row.rule).trim();
-  row.evidenceQualityRationale = String(result.evidenceQualityRationale || '').trim();
   row.evidenceItems = Array.isArray(result.evidenceItems) ? result.evidenceItems.map(e => ({
     source: String(e.source || '').trim(),
     pdfPage: String(e.pdfPage || '').trim(),
