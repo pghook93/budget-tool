@@ -132,6 +132,38 @@
   .upload-status.error{color:var(--error)}
   .upload-status.working{color:var(--primary);font-weight:600}
   .upload-status.ok{color:var(--success);font-weight:600}
+
+  /* Focus brief textarea */
+  .focus-brief{width:100%;min-height:90px;padding:.65rem .85rem;
+    border:1px solid var(--border);border-radius:12px;background:var(--surface);
+    font-family:inherit;font-size:var(--text-sm);color:var(--text);
+    line-height:1.5;resize:vertical;outline:none}
+  .focus-brief:focus{border-color:var(--primary)}
+
+  /* Insights card */
+  .insights-section{margin-top:1.25rem}
+  .insights-group{margin-top:1.25rem}
+  .insights-group h3{margin:0 0 .6rem;font-size:var(--text-base);font-weight:700}
+  .insights-group .group-desc{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 .75rem}
+  .insight-card{padding:1rem 1.15rem;border-radius:14px;background:var(--surface-2);
+    border:1px solid var(--border);margin-bottom:.65rem}
+  .insight-card.risk{background:#fff0f0;border-color:#e8cdd0}
+  .insight-card .insight-title{font-weight:700;font-size:var(--text-sm);margin-bottom:.35rem}
+  .insight-card .meta-row{font-size:var(--text-xs);color:var(--text-muted);
+    margin-bottom:.55rem;display:flex;gap:.8rem;flex-wrap:wrap}
+  .insight-card .insight-summary{font-size:var(--text-sm);line-height:1.55;margin:.35rem 0}
+  .insight-card .insight-why{font-size:var(--text-sm);line-height:1.5;margin:.5rem 0 .4rem;
+    padding:.55rem .75rem;background:var(--surface);border-radius:10px;
+    border-left:3px solid var(--primary)}
+  .insight-card.risk .insight-why{border-left-color:var(--error)}
+  .insight-card .insight-why strong{display:block;font-size:var(--text-xs);text-transform:uppercase;
+    letter-spacing:.06em;color:var(--text-muted);margin-bottom:.2rem;font-weight:700}
+  .insight-card .insight-quote{font-size:var(--text-sm);font-style:italic;line-height:1.5;
+    padding:.5rem .75rem;border-left:3px solid var(--border);
+    background:var(--surface);border-radius:0 8px 8px 0;margin:.5rem 0 0}
+  .insight-tag{display:inline-block;padding:.15rem .5rem;border-radius:999px;
+    font-size:.7rem;font-weight:600;background:var(--surface);
+    border:1px solid var(--border);color:var(--text-muted);margin-right:.35rem}
 </style>
 </head>
 <body>
@@ -164,6 +196,19 @@
       <span class="upload-status" id="evalStatus">Upload a submission and budget docs to enable evaluation.</span>
     </div>
 
+    <div class="upload-row" style="background:#eef1f7;border-color:#cdd4e3;flex-direction:column;align-items:stretch">
+      <div style="font-size:var(--text-xs);text-transform:uppercase;letter-spacing:.06em;color:var(--text-muted);font-weight:700;margin-bottom:.4rem">Step 4 · Insights beyond the asks</div>
+      <textarea id="focusBrief" class="focus-brief" placeholder="Optional: a short paragraph or bullet list of your organisation's strategic priorities, focus populations, and policy areas (e.g. 'JSS focuses on men's behaviour change, Aboriginal justice, youth justice, homelessness, economic participation, and climate justice.'). The tool uses this to surface unasked measures and risks relevant to you."></textarea>
+      <div style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-top:.6rem">
+        <label class="btn" for="planUpload">Upload strategic plan (optional)</label>
+        <input type="file" id="planUpload" accept="application/pdf,.pdf" style="display:none" />
+        <button type="button" class="btn" id="clearPlanBtn" style="display:none">Clear plan</button>
+        <button type="button" class="btn primary" id="insightsBtn" disabled>Generate insights</button>
+        <button type="button" class="btn" id="stopInsightsBtn" style="display:none">Stop</button>
+        <span class="upload-status" id="insightsStatus" style="flex:1">Upload budget docs and optionally add focus context to enable insights.</span>
+      </div>
+    </div>
+
     <div class="toolbar">
       <input id="searchBox" class="search-input" type="search" placeholder="Search asks, categories, or evidence…" />
       <span class="count-note" id="countNote">12 asks</span>
@@ -172,7 +217,7 @@
     </div>
 
     <div class="table-wrap">
-      <table>
+      <table id="asksTable">
         <thead>
           <tr>
             <th class="col-overarching">Overarching category
@@ -192,6 +237,12 @@
         <tbody id="tableBody"></tbody>
       </table>
     </div>
+  </section>
+
+  <section class="card card-pad insights-section" id="insightsCard" style="display:none">
+    <h2 style="margin:0 0 .35rem;font-size:var(--text-lg);font-weight:700">Insights beyond the asks</h2>
+    <p class="lede" style="margin:0 0 .5rem">Budget measures relevant to your strategic priorities that weren't in the submission, plus budget measures that undercut your strategic position.</p>
+    <div id="insightsBody"></div>
   </section>
 </div>
 
@@ -1051,6 +1102,266 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
 document.getElementById('stopEvalBtn').addEventListener('click', () => {
   if (evalAbortController) evalAbortController.abort();
 });
+
+// ============================================================================
+// Step 4: Insights beyond the asks
+// ============================================================================
+let strategicPlan = null; // { name, pages, totalChars } | null
+let insightsAbortController = null;
+let insightsData = null; // { unaskedPriorities: [...], risks: [...] } | null
+
+function setInsightsStatus(msg, kind) {
+  const el = document.getElementById('insightsStatus');
+  el.className = 'upload-status' + (kind ? ' ' + kind : '');
+  el.textContent = msg;
+}
+
+function updateInsightsButtonState() {
+  const btn = document.getElementById('insightsBtn');
+  const hasBudget = budgetDocs.length > 0;
+  const brief = document.getElementById('focusBrief').value.trim();
+  const hasContext = !!brief || !!strategicPlan || rows.length > 0;
+  btn.disabled = !(hasBudget && hasContext);
+  if (!hasBudget) {
+    setInsightsStatus('Upload budget docs in Step 2 to enable insights.', '');
+  } else if (!hasContext) {
+    setInsightsStatus('Add a focus brief, strategic plan, or keep the asks register populated to enable insights.', '');
+  } else {
+    const sources = [];
+    if (brief) sources.push('focus brief');
+    if (strategicPlan) sources.push(`strategic plan (${strategicPlan.name})`);
+    if (rows.length) sources.push(`${rows.length} extracted asks`);
+    setInsightsStatus(`Ready to generate insights using: ${sources.join(', ')}.`, 'ok');
+  }
+}
+
+document.getElementById('focusBrief').addEventListener('input', updateInsightsButtonState);
+
+document.getElementById('planUpload').addEventListener('change', async (e) => {
+  const file = e.target.files && e.target.files[0];
+  if (!file) return;
+  try {
+    setInsightsStatus(`Parsing strategic plan "${file.name}"…`, 'working');
+    const pages = await extractPdfText(file);
+    const totalChars = pages.reduce((n, p) => n + p.text.length, 0);
+    strategicPlan = { name: file.name, pages, totalChars };
+    document.getElementById('clearPlanBtn').style.display = '';
+    updateInsightsButtonState();
+  } catch (err) {
+    console.error(err);
+    setInsightsStatus(`Strategic plan upload failed: ${err.message}`, 'error');
+  } finally {
+    e.target.value = '';
+  }
+});
+
+document.getElementById('clearPlanBtn').addEventListener('click', () => {
+  strategicPlan = null;
+  document.getElementById('clearPlanBtn').style.display = 'none';
+  updateInsightsButtonState();
+});
+
+function buildFocusContext() {
+  const parts = [];
+  const brief = document.getElementById('focusBrief').value.trim();
+  if (brief) {
+    parts.push(`FOCUS BRIEF (from the user):\n${brief}`);
+  }
+  if (strategicPlan) {
+    const planText = strategicPlan.pages.map(p => p.text).join('\n').slice(0, 60000); // cap to keep prompt manageable
+    parts.push(`STRATEGIC PLAN (from uploaded document "${strategicPlan.name}"):\n${planText}`);
+  }
+  if (rows.length) {
+    const asksList = rows.map(r => `- [${r.overarching}] ${r.ask}`).join('\n');
+    parts.push(`ALREADY-ASKED ITEMS (these are in the submission and already on the asks register — do NOT include measures that directly match these in the unasked-priorities list):\n${asksList}`);
+  }
+  return parts.join('\n\n');
+}
+
+function buildInsightsPrompt(focusContext, corpus) {
+  return `You are a policy analyst supporting an advocacy organisation's review of an Australian Federal Budget.
+
+Your job is to surface budget measures the organisation would want to know about but that are NOT already captured in their pre-budget submission's asks register.
+
+${focusContext}
+
+BUDGET EVIDENCE (verbatim text from uploaded budget documents, with document name and page markers):
+${corpus}
+
+Return ONLY a JSON object matching this schema exactly:
+{
+  "unaskedPriorities": [
+    {
+      "title": "short name of the budget measure",
+      "amount": "dollar figure as written in the budget, e.g. '$50.0 million over 4 years' or 'not costed'",
+      "source": "document name (exact from the === markers)",
+      "pdfPage": "page number as string",
+      "priorityArea": "which of the organisation's priority areas this touches (short phrase, drawn from the focus context)",
+      "summary": "1-2 sentences describing what the measure does, in plain English",
+      "whyItMatters": "1-2 sentences explaining why this matters to this organisation given their focus",
+      "quote": "verbatim excerpt from the budget text (1-3 sentences max)"
+    }
+  ],
+  "risks": [
+    {
+      "title": "short name of the budget measure or pattern",
+      "amount": "dollar figure as written in the budget, or 'not costed'",
+      "source": "document name (exact from the === markers)",
+      "pdfPage": "page number as string",
+      "priorityArea": "which of the organisation's priority areas this threatens (short phrase)",
+      "summary": "1-2 sentences describing the measure",
+      "whyItMatters": "1-2 sentences explaining why this undercuts the organisation's strategic position",
+      "quote": "verbatim excerpt from the budget text (1-3 sentences max)"
+    }
+  ]
+}
+
+Rules:
+- Only include budget measures genuinely relevant to the organisation's priority areas as stated in the focus context. Do not pad with generic measures.
+- Exclude anything that matches an item in the ALREADY-ASKED ITEMS list — those are already covered by the asks register.
+- For "unaskedPriorities": measures that the organisation would likely support or engage with, not in their submission.
+- For "risks": measures that work against the organisation's strategic position (cuts to relevant programs, expanded mutual obligations, reforms that undercut their advocacy, shifts of responsibility, etc.).
+- Aim for 5-12 items per category. Fewer is fine if there's genuinely less to flag. Empty array is valid.
+- All quotes must be verbatim from the budget text. Do not invent measures or figures.
+- Sort each list by how significant the item is (most significant first).
+- Return ONLY the JSON object. No prose, no code fences.`;
+}
+
+function renderInsights(data) {
+  insightsData = data;
+  const card = document.getElementById('insightsCard');
+  const body = document.getElementById('insightsBody');
+  const priorities = Array.isArray(data?.unaskedPriorities) ? data.unaskedPriorities : [];
+  const risks = Array.isArray(data?.risks) ? data.risks : [];
+
+  if (!priorities.length && !risks.length) {
+    body.innerHTML = '<p style="color:var(--text-muted);font-size:var(--text-sm);margin:.5rem 0 0">No additional insights found. The budget either did not contain measures relevant to your stated priorities beyond what is already in the asks register, or the focus context was too brief to surface them.</p>';
+    card.style.display = '';
+    return;
+  }
+
+  function cardHtml(item, kind) {
+    const tags = [];
+    if (item.priorityArea) tags.push(`<span class="insight-tag">${escapeHtml(item.priorityArea)}</span>`);
+    return `
+      <article class="insight-card ${kind === 'risk' ? 'risk' : ''}">
+        <div class="insight-title">${escapeHtml(item.title || 'Untitled measure')}${item.amount ? ' — ' + escapeHtml(item.amount) : ''}</div>
+        <div class="meta-row">
+          ${item.source ? `<span>${escapeHtml(item.source)}</span>` : ''}
+          ${item.pdfPage ? `<span>PDF page ${escapeHtml(item.pdfPage)}</span>` : ''}
+        </div>
+        <div style="margin-bottom:.4rem">${tags.join('')}</div>
+        <p class="insight-summary">${escapeHtml(item.summary || '')}</p>
+        ${item.whyItMatters ? `<div class="insight-why"><strong>${kind === 'risk' ? 'Why this is a risk' : 'Why it matters to you'}</strong>${escapeHtml(item.whyItMatters)}</div>` : ''}
+        ${item.quote ? `<div class="insight-quote">“${escapeHtml(item.quote)}”</div>` : ''}
+      </article>
+    `;
+  }
+
+  const sections = [];
+  if (priorities.length) {
+    sections.push(`
+      <div class="insights-group">
+        <h3>Unasked priority measures (${priorities.length})</h3>
+        <p class="group-desc">Budget measures that touch your strategic priorities but were not in the submission's asks.</p>
+        ${priorities.map(p => cardHtml(p, 'priority')).join('')}
+      </div>
+    `);
+  }
+  if (risks.length) {
+    sections.push(`
+      <div class="insights-group">
+        <h3>Risks to your strategic position (${risks.length})</h3>
+        <p class="group-desc">Budget measures that undercut, contradict, or create tension with your strategic priorities.</p>
+        ${risks.map(r => cardHtml(r, 'risk')).join('')}
+      </div>
+    `);
+  }
+
+  body.innerHTML = sections.join('');
+  card.style.display = '';
+}
+
+document.getElementById('insightsBtn').addEventListener('click', async () => {
+  if (!budgetDocs.length) return;
+  const btn = document.getElementById('insightsBtn');
+  const stopBtn = document.getElementById('stopInsightsBtn');
+  btn.disabled = true;
+  stopBtn.style.display = '';
+  insightsAbortController = new AbortController();
+  const signal = insightsAbortController.signal;
+
+  const focusContext = buildFocusContext();
+  if (!focusContext) {
+    setInsightsStatus('Nothing to base insights on. Add a focus brief, a strategic plan, or run Step 1.', 'error');
+    btn.disabled = false; stopBtn.style.display = 'none';
+    return;
+  }
+  const corpus = buildBudgetCorpus();
+  const prompt = buildInsightsPrompt(focusContext, corpus);
+
+  setInsightsStatus(`Generating insights against ${corpus.length.toLocaleString()} chars of budget text… (typically 45-90s)`, 'working');
+  const startedAt = Date.now();
+  const tick = setInterval(() => {
+    const s = Math.round((Date.now() - startedAt) / 1000);
+    setInsightsStatus(`Generating insights… ${s}s elapsed`, 'working');
+  }, 2000);
+
+  try {
+    const res = await fetch(GEMINI_ENDPOINT, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        contents: [{ role: 'user', parts: [{ text: prompt }] }],
+        generationConfig: { temperature: 0.3, responseMimeType: 'application/json' }
+      }),
+      signal
+    });
+    clearInterval(tick);
+    if (!res.ok) {
+      const err = await res.text().catch(() => '');
+      throw new Error(`Worker ${res.status}: ${err.slice(0, 200)}`);
+    }
+    const data = await res.json();
+    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
+    if (!text) {
+      const finish = data?.candidates?.[0]?.finishReason || 'unknown';
+      throw new Error(`Empty response (${finish})`);
+    }
+    let parsed;
+    try { parsed = JSON.parse(text); }
+    catch (e) {
+      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
+      parsed = JSON.parse(cleaned);
+    }
+    renderInsights(parsed);
+    const totalElapsed = Math.round((Date.now() - startedAt) / 1000);
+    const pCount = parsed?.unaskedPriorities?.length || 0;
+    const rCount = parsed?.risks?.length || 0;
+    setInsightsStatus(`Insights generated in ${totalElapsed}s · ${pCount} unasked priorities, ${rCount} risks.`, 'ok');
+  } catch (err) {
+    clearInterval(tick);
+    if (err.name !== 'AbortError') {
+      console.error(err);
+      setInsightsStatus(`Insight generation failed: ${err.message}`, 'error');
+    } else {
+      setInsightsStatus('Insight generation stopped.', 'error');
+    }
+  } finally {
+    btn.disabled = false;
+    stopBtn.style.display = 'none';
+    insightsAbortController = null;
+  }
+});
+
+document.getElementById('stopInsightsBtn').addEventListener('click', () => {
+  if (insightsAbortController) insightsAbortController.abort();
+});
+
+// Re-evaluate insights button state whenever budget docs or submission change.
+// We piggyback on the handlers we already have: budget upload, clear, submission upload, reset.
+// Hooking via a MutationObserver on the table is overkill; simpler: just call it now.
+updateInsightsButtonState();
 
 updateEvaluateButtonState();
 render();
