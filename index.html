@@ -1369,12 +1369,56 @@ async function geminiFetchOnce({ prompt, temperature = 0.1, signal, onTick }) {
     err.retryable = (finish === 'OTHER' || finish === 'unknown');
     throw err;
   }
+  // Parse the model's JSON output. Multiple layers of defense because both
+  // Gemini and Claude (via failover) occasionally wrap JSON in code fences,
+  // preface it with prose like "Here is the JSON:", or trail with commentary.
+  // Claude Haiku also rarely produces a malformed JSON (unescaped quote,
+  // missing comma) — in that case we mark the error retryable so the ask
+  // gets a second chance, which almost always returns clean output.
   try {
     return JSON.parse(text);
-  } catch (e) {
-    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
-    return JSON.parse(cleaned); // if this throws too, it bubbles up as non-retryable
+  } catch (e1) {
+    // Layer 1: strip markdown code fences.
+    let cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '').trim();
+    try { return JSON.parse(cleaned); } catch (e2) {}
+    // Layer 2: extract the first balanced top-level JSON object from the
+    // response, in case the model prefaced or trailed it with prose.
+    const extracted = extractFirstJsonObject(cleaned);
+    if (extracted) {
+      try { return JSON.parse(extracted); } catch (e3) {}
+    }
+    // Layer 3: give up on this attempt but mark it retryable so the outer
+    // loop tries the whole call again. Malformed JSON from the model is
+    // almost always transient — a retry produces clean output.
+    console.warn('Failed to parse model JSON response; will retry. Raw text:', text.slice(0, 500));
+    const err = new Error('Model returned malformed JSON — retrying.');
+    err.retryable = true;
+    throw err;
   }
+}
+
+// Scan for the first balanced `{...}` at the top level. Ignores braces inside
+// string literals (respecting backslash-escaping). Returns the substring or
+// null if no balanced object is found.
+function extractFirstJsonObject(s) {
+  const start = s.indexOf('{');
+  if (start === -1) return null;
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = start; i < s.length; i++) {
+    const ch = s[i];
+    if (escape) { escape = false; continue; }
+    if (ch === '\\' && inString) { escape = true; continue; }
+    if (ch === '"') { inString = !inString; continue; }
+    if (inString) continue;
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return s.slice(start, i + 1);
+    }
+  }
+  return null;
 }
 
 // Retry wrapper. statusFn is optional — we call it with a human-readable
