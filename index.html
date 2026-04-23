@@ -6,7 +6,7 @@
 <title>ACOSS Ask Register — Budget Alignment</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
 <style>
   :root{
     /* Deep-space palette inspired by Perplexity's Space Race page.
@@ -49,8 +49,9 @@
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;color:var(--text);
-    font-family:'Plus Jakarta Sans','Inter','Helvetica Neue',Arial,sans-serif;
-    font-size:16px;line-height:1.55;font-weight:400;
+    font-family:'Inter','Helvetica Neue',Arial,sans-serif;
+    font-size:15.5px;line-height:1.55;font-weight:400;
+    font-feature-settings:'cv11','ss01','ss03';
     -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
     /* Deep-space backdrop: near-black base + two low-opacity nebula washes
        (indigo + teal) fixed to the viewport. */
@@ -71,13 +72,18 @@
   .shell{max-width:1400px;margin:0 auto;padding:2.25rem clamp(1rem,3vw,2rem);
     position:relative;z-index:1}
   h1{font-size:var(--text-2xl);margin:0 0 .35rem;font-weight:700;letter-spacing:-.02em;line-height:1.15}
-  .hero-title{font-size:var(--text-hero);font-weight:700;letter-spacing:-.025em;
-    line-height:1.12;margin:0 0 1.25rem;padding:.1em 0 .05em;
+  .hero-eyebrow{display:inline-flex;align-items:center;gap:.55rem;
+    font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.22em;
+    color:var(--accent);font-weight:600;margin:0 0 .9rem;
+    font-family:'Inter',sans-serif}
+  .hero-eyebrow::before{content:"";width:22px;height:1px;background:var(--accent);opacity:.7}
+  .hero-title{font-size:var(--text-hero);font-weight:500;letter-spacing:-.018em;
+    line-height:1.08;margin:0 0 1rem;padding:.05em 0 .1em;
     color:#ffffff;
-    text-shadow:0 0 32px hsla(0,0%,100%,0.25),
-                0 0 60px hsla(172,65%,58%,0.15),
-                0 0 1px hsla(0,0%,100%,0.6);
-    font-family:'Plus Jakarta Sans','Inter',sans-serif}
+    font-family:'Fraunces','Georgia',serif;
+    font-variation-settings:"opsz" 96;
+    text-shadow:0 0 28px hsla(0,0%,100%,0.18),
+                0 0 60px hsla(172,65%,58%,0.10)}
   .lede{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 1.5rem;max-width:70ch;line-height:1.6}
   .card{background:var(--surface);border:1px solid var(--border);
     border-radius:var(--radius-xl);box-shadow:var(--shadow-sm);
@@ -259,7 +265,7 @@
      Progress stepper — horizontal, three states per node.
      Node states: .is-done (muted tick), .is-current (highlighted), .is-locked.
      ========================================================================*/
-  .stepper{display:grid;grid-template-columns:repeat(3,1fr);gap:0;
+  .stepper{display:grid;grid-template-columns:repeat(4,1fr);gap:0;
     margin:1rem 0 1.25rem;border:1px solid var(--border);border-radius:var(--radius-md);
     background:var(--surface);overflow:hidden}
   .stepper-node{position:relative;padding:1rem 1.1rem 1.1rem;
@@ -299,7 +305,8 @@
   .stepper-node.is-locked .stepper-body{color:var(--text-muted)}
   .stepper-node.is-locked .stepper-num{background:transparent;border-style:dashed;
     border-color:var(--border);color:var(--text-faint)}
-  .stepper-node.is-locked .stepper-action{display:none}
+  .stepper-node.is-locked .stepper-action,
+  .stepper-node.is-locked #focusDrawer{display:none}
 
   .stepper-tag{display:inline-flex;align-items:center;padding:.15rem .5rem;
     border-radius:999px;font-size:var(--text-2xs);font-weight:700;
@@ -308,17 +315,25 @@
   .stepper-node.rehearsal .stepper-tag{color:var(--text-strong);border-color:hsla(0,0%,100%,0.35);
     background:var(--primary-tint)}
   .stepper-node.live .stepper-tag{color:var(--accent);border-color:var(--accent);
-    background:hsla(215,60%,65%,.12)}
+    background:var(--accent-tint)}
+  .stepper-tag.optional-tag{color:var(--text-faint);border-color:var(--border-soft);
+    background:transparent;text-transform:none;letter-spacing:.02em;font-weight:500}
   .stepper-sub{font-size:var(--text-xs);color:var(--text-muted);margin:.2rem 0 0}
   .stepper-error{color:var(--error);font-weight:600}
   .stepper-link{background:none;border:0;color:var(--accent);padding:0;
     font:inherit;text-decoration:underline;cursor:pointer;font-size:var(--text-xs)}
   .stepper-link:hover{color:var(--accent-strong);text-decoration:none}
-  @media (max-width: 720px){
+  @media (max-width: 960px){
+    .stepper{grid-template-columns:repeat(2,1fr)}
+    .stepper-node{border-right:1px solid var(--border);border-bottom:1px solid var(--border)}
+    .stepper-node:nth-child(2n){border-right:0}
+    .stepper-node:nth-last-child(-n+2){border-bottom:0}
+    .stepper-node + .stepper-node::before{display:none}
+  }
+  @media (max-width: 560px){
     .stepper{grid-template-columns:1fr}
     .stepper-node{border-right:0;border-bottom:1px solid var(--border)}
     .stepper-node:last-child{border-bottom:0}
-    .stepper-node + .stepper-node::before{display:none}
   }
 
   /* Verdict-count tiles above the register — click to filter. */
@@ -355,7 +370,10 @@
   <section class="card card-pad">
     <h1 id="pageTitle" class="hero-title">Budget Night Helper</h1>
 
-    <!-- Horizontal 3-step progress tracker. States: is-done / is-current / is-locked. -->
+    <!-- Four-step progress tracker. States: is-done / is-current / is-locked.
+         Order: Submission → Strategic focus (optional) → Budget papers → Evaluate.
+         Strategic focus sits before budget upload so orgs can prepare it in
+         advance and only need to drop in budget papers on the night. -->
     <div class="stepper" id="stepper">
       <div class="stepper-node is-current" id="step1Node">
         <div class="stepper-head">
@@ -376,11 +394,31 @@
       <div class="stepper-node is-locked" id="step2Node">
         <div class="stepper-head">
           <span class="stepper-num"><span>2</span></span>
-          <span>Budget documents</span>
+          <span>Strategic focus</span>
+          <span class="stepper-tag optional-tag">Optional</span>
         </div>
-        <div class="stepper-title" id="step2Title">Upload budget papers</div>
-        <div class="stepper-body" id="step2Body">Upload Budget Paper 2 and any Portfolio Budget Statements relevant to your work.</div>
+        <div class="stepper-title" id="step2Title">Add your strategic focus</div>
+        <div class="stepper-body" id="step2Body">A short brief on your priorities, or a strategic-plan PDF. Used to surface insights and risks relevant to your organisation.</div>
         <div class="stepper-action" id="step2Action">
+          <button type="button" class="btn" id="focusToggle">Add focus brief</button>
+          <label class="btn" for="planUpload">Upload strategic plan</label>
+          <input type="file" id="planUpload" accept="application/pdf,.pdf" style="display:none" />
+          <button type="button" class="stepper-link" id="clearPlanBtn" style="display:none">Clear plan</button>
+        </div>
+        <!-- Focus-brief drawer: collapsed by default, expands on toggle. -->
+        <div id="focusDrawer" style="display:none;margin-top:.65rem;padding-top:.65rem;border-top:1px dashed var(--border)">
+          <textarea id="focusBrief" class="focus-brief" placeholder="A short paragraph or bullet list of your organisation's strategic priorities, focus populations, and policy areas (e.g. 'JSS focuses on men's behaviour change, Aboriginal justice, youth justice, homelessness, economic participation, and climate justice.'). Used to surface unasked measures and risks relevant to you."></textarea>
+        </div>
+      </div>
+
+      <div class="stepper-node is-locked" id="step3Node">
+        <div class="stepper-head">
+          <span class="stepper-num"><span>3</span></span>
+          <span>Budget papers</span>
+        </div>
+        <div class="stepper-title" id="step3Title">Upload budget papers</div>
+        <div class="stepper-body" id="step3Body">Upload Budget Paper 2 and any Portfolio Budget Statements relevant to your work.</div>
+        <div class="stepper-action" id="step3Action">
           <label class="btn primary" for="budgetUpload">Upload budget PDFs</label>
           <input type="file" id="budgetUpload" accept="application/pdf,.pdf" multiple />
           <button type="button" class="stepper-link" id="clearBudgetBtn" style="display:none">Clear budget docs</button>
@@ -388,26 +426,16 @@
         <span class="upload-status" id="budgetStatus" style="display:none"></span>
       </div>
 
-      <div class="stepper-node is-locked" id="step3Node">
+      <div class="stepper-node is-locked" id="step4Node">
         <div class="stepper-head">
-          <span class="stepper-num"><span>3</span></span>
+          <span class="stepper-num"><span>4</span></span>
           <span>Evaluate</span>
         </div>
-        <div class="stepper-title" id="step3Title">Run alignment analysis</div>
-        <div class="stepper-body" id="step3Body">Checks each ask against the budget and, if a focus brief is provided, surfaces extra insights.</div>
-        <div class="stepper-action" id="step3Action">
+        <div class="stepper-title" id="step4Title">Run alignment analysis</div>
+        <div class="stepper-body" id="step4Body">Checks each ask against the budget and surfaces insights tied to your strategic focus.</div>
+        <div class="stepper-action" id="step4Action">
           <button type="button" class="btn primary" id="evaluateBtn" disabled>Evaluate asks</button>
           <button type="button" class="btn" id="stopEvalBtn" style="display:none">Stop</button>
-          <button type="button" class="stepper-link" id="focusToggle">Add focus brief (optional)</button>
-        </div>
-        <!-- Focus-brief drawer inside Step 3: collapsed by default, expands on toggle. -->
-        <div id="focusDrawer" style="display:none;margin-top:.65rem;padding-top:.65rem;border-top:1px dashed var(--border)">
-          <textarea id="focusBrief" class="focus-brief" placeholder="Optional: a short paragraph or bullet list of your organisation's strategic priorities, focus populations, and policy areas (e.g. 'JSS focuses on men's behaviour change, Aboriginal justice, youth justice, homelessness, economic participation, and climate justice.'). The tool uses this to surface unasked measures and risks relevant to you."></textarea>
-          <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.5rem">
-            <label class="btn" for="planUpload">Upload strategic plan (optional)</label>
-            <input type="file" id="planUpload" accept="application/pdf,.pdf" style="display:none" />
-            <button type="button" class="stepper-link" id="clearPlanBtn" style="display:none">Clear plan</button>
-          </div>
         </div>
         <!-- Hidden but preserved for the existing code paths. -->
         <span class="upload-status" id="evalStatus" style="display:none"></span>
@@ -1715,14 +1743,18 @@ document.getElementById('stopEvalBtn').addEventListener('click', () => {
   if (evalAbortController) evalAbortController.abort();
 });
 
-// Focus-brief drawer toggle inside Step 3. Flip label and aria-expanded when
+// Focus-brief drawer toggle inside Step 2 (Strategic focus). Flip label when
 // opened so users know they can tuck it back away.
 document.getElementById('focusToggle').addEventListener('click', () => {
   const drawer = document.getElementById('focusDrawer');
   const btn = document.getElementById('focusToggle');
   const open = drawer.style.display === '';
   drawer.style.display = open ? 'none' : '';
-  btn.textContent = open ? 'Add focus brief (optional)' : 'Hide focus brief';
+  btn.textContent = open ? 'Add focus brief' : 'Hide focus brief';
+  if (!open) {
+    const ta = document.getElementById('focusBrief');
+    if (ta) ta.focus();
+  }
 });
 
 // ============================================================================
@@ -1762,21 +1794,29 @@ function updateInsightsButtonState() {
 // and updates titles/bodies so the current step always reflects what's
 // happening. Called every time rows, budgetDocs, or verdicts change.
 //
-// State rules:
+// State rules (4 steps: Submission → Strategic focus → Budget → Evaluate):
 //   Step 1: done once rows.length > 0; current until then.
-//   Step 2: locked until rows.length > 0; current until budgetDocs.length > 0;
+//   Step 2 (optional): done once a focus brief or strategic plan is present;
+//           "current" once step 1 is done and it's still empty. Locked before
+//           step 1. Can be skipped — does not block step 3 or 4.
+//   Step 3: locked until step 1 is done; current until budget uploaded;
 //           done once budgetDocs.length > 0.
-//   Step 3: locked until both above are done; current once ready; stays current
-//           (not "done") after evaluation so the user can re-run if they want.
+//   Step 4: locked until steps 1 and 3 are done; current once ready; stays
+//           current (not "done") after evaluation so the user can re-run.
 function updateStepper() {
   const hasSubmission = rows.length > 0;
   const hasBudget = typeof budgetDocs !== 'undefined' && budgetDocs.length > 0;
+  const focusEl = document.getElementById('focusBrief');
+  const hasFocusText = !!(focusEl && focusEl.value && focusEl.value.trim());
+  const hasPlan = typeof strategicPlan !== 'undefined' && !!strategicPlan;
+  const hasFocus = hasFocusText || hasPlan;
   const anyEvaluated = rows.some(r => r.verdict && r.verdict !== 'Not yet evaluated');
 
   const nodes = {
     1: document.getElementById('step1Node'),
     2: document.getElementById('step2Node'),
     3: document.getElementById('step3Node'),
+    4: document.getElementById('step4Node'),
   };
   function setState(n, state) {
     const el = nodes[n]; if (!el) return;
@@ -1795,37 +1835,61 @@ function updateStepper() {
     setState(1, 'is-current');
   }
 
-  // Step 2 — Budget docs
+  // Step 2 — Strategic focus (optional)
   if (!hasSubmission) {
     setState(2, 'is-locked');
-  } else if (hasBudget) {
+  } else if (hasFocus) {
     setState(2, 'is-done');
     const t = document.getElementById('step2Title');
     const b = document.getElementById('step2Body');
+    if (t) t.textContent = hasPlan && hasFocusText
+      ? 'Strategic focus added'
+      : hasPlan ? 'Strategic plan uploaded'
+      : 'Focus brief added';
+    if (b) {
+      if (hasPlan && strategicPlan && strategicPlan.name) b.textContent = strategicPlan.name;
+      else if (hasFocusText) {
+        const t2 = focusEl.value.trim();
+        b.textContent = t2.length > 140 ? t2.slice(0,137)+'…' : t2;
+      }
+    }
+  } else {
+    setState(2, 'is-current');
+  }
+
+  // Step 3 — Budget papers
+  if (!hasSubmission) {
+    setState(3, 'is-locked');
+  } else if (hasBudget) {
+    setState(3, 'is-done');
+    const t = document.getElementById('step3Title');
+    const b = document.getElementById('step3Body');
     if (t) t.textContent = `Budget loaded · ${budgetDocs.length} doc${budgetDocs.length===1?'':'s'}`;
     if (b) b.textContent = budgetDocs.map(d => d.name).join(', ');
     const clr = document.getElementById('clearBudgetBtn');
     if (clr) clr.style.display = '';
   } else {
-    setState(2, 'is-current');
+    setState(3, 'is-current');
     if (typeof refreshStep2Copy === 'function') refreshStep2Copy();
     const clr = document.getElementById('clearBudgetBtn');
     if (clr) clr.style.display = 'none';
   }
 
-  // Step 3 — Evaluate
+  // Step 4 — Evaluate
   if (!hasSubmission || !hasBudget) {
-    setState(3, 'is-locked');
+    setState(4, 'is-locked');
   } else {
-    setState(3, 'is-current');
-    const t = document.getElementById('step3Title');
-    const b = document.getElementById('step3Body');
+    setState(4, 'is-current');
+    const t = document.getElementById('step4Title');
+    const b = document.getElementById('step4Body');
     const evalBtn = document.getElementById('evaluateBtn');
     if (evalBtn) evalBtn.textContent = anyEvaluated ? `Re-evaluate ${rows.length} asks` : `Evaluate ${rows.length} asks`;
     if (t) t.textContent = anyEvaluated ? 'Evaluation complete' : 'Run alignment analysis';
     if (b) b.textContent = anyEvaluated
-      ? 'Results below. You can re-run with changes to the focus brief or budget docs.'
-      : 'Checks each ask against the budget. Add a focus brief for extra insights.';
+      ? 'Results below. Re-run with changes to your focus or budget docs.'
+      : (hasFocus
+        ? 'Checks each ask against the budget and surfaces insights tied to your focus.'
+        : 'Checks each ask against the budget. Add a focus brief in step 2 for extra insights.');
   }
 }
 // Keep the old name alive for any lingering callers.
@@ -1861,7 +1925,10 @@ function renderVerdictTiles() {
   });
 }
 
-document.getElementById('focusBrief').addEventListener('input', updateInsightsButtonState);
+document.getElementById('focusBrief').addEventListener('input', () => {
+  updateInsightsButtonState();
+  if (typeof updateStepper === 'function') updateStepper();
+});
 
 document.getElementById('planUpload').addEventListener('change', async (e) => {
   const file = e.target.files && e.target.files[0];
@@ -1873,6 +1940,7 @@ document.getElementById('planUpload').addEventListener('change', async (e) => {
     strategicPlan = { name: file.name, pages, totalChars };
     document.getElementById('clearPlanBtn').style.display = '';
     updateInsightsButtonState();
+    if (typeof updateStepper === 'function') updateStepper();
   } catch (err) {
     console.error(err);
     setInsightsStatus(`Strategic plan upload failed: ${err.message}`, 'error');
@@ -1885,6 +1953,7 @@ document.getElementById('clearPlanBtn').addEventListener('click', () => {
   strategicPlan = null;
   document.getElementById('clearPlanBtn').style.display = 'none';
   updateInsightsButtonState();
+  if (typeof updateStepper === 'function') updateStepper();
 });
 
 function buildFocusContext() {
@@ -2169,11 +2238,11 @@ function extractSubmissionYear(str) {
 // Default covers the case where no preset is loaded.
 let currentSubmissionYear = null;
 
-// Set Step 2's body copy based on the year the submission covers. Uses a
-// year-agnostic fallback when we don't know yet.
+// Set Step 3's (Budget papers) body copy based on the year the submission
+// covers. Uses a year-agnostic fallback when we don't know yet.
 function refreshStep2Copy() {
-  const t = document.getElementById('step2Title');
-  const b = document.getElementById('step2Body');
+  const t = document.getElementById('step3Title');
+  const b = document.getElementById('step3Body');
   const hasBudget = typeof budgetDocs !== 'undefined' && budgetDocs.length > 0;
   if (!t || !b || hasBudget) return; // updateStepper handles the done state
   const yr = currentSubmissionYear;
