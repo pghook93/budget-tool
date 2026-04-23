@@ -2554,15 +2554,20 @@ function buildFocusContext() {
   const parts = [];
   const brief = document.getElementById('focusBrief').value.trim();
   if (brief) {
-    parts.push(`FOCUS BRIEF (from the user):\n${brief}`);
+    parts.push(`STRATEGIC FOCUS (brief from the organisation):\n${brief}`);
   }
   if (strategicPlan) {
     const planText = strategicPlan.pages.map(p => p.text).join('\n').slice(0, 60000); // cap to keep prompt manageable
     parts.push(`STRATEGIC PLAN (from uploaded document "${strategicPlan.name}"):\n${planText}`);
   }
   if (rows.length) {
+    // Submission asks are used ONLY as a duplication filter — to avoid
+    // surfacing the same measures that the asks-table already covers. They
+    // are NOT the frame for the insights section. The section is framed by
+    // the strategic focus/plan (or, if neither was provided, by the asks
+    // acting as a fallback signal of the org's priorities).
     const asksList = rows.map(r => `- [${r.overarching}] ${r.ask}`).join('\n');
-    parts.push(`ALREADY-ASKED ITEMS (these are in the submission and already on the asks register — do NOT include measures that directly match these in the unasked-priorities list):\n${asksList}`);
+    parts.push(`SUBMISSION ASKS (FOR FILTERING ONLY — do not frame the insights around these; they are already covered in a separate section of the tool. Use them only to avoid surfacing the same budget measures twice):\n${asksList}`);
   }
   return parts.join('\n\n');
 }
@@ -2570,7 +2575,9 @@ function buildFocusContext() {
 function buildInsightsPrompt(focusContext, corpus) {
   return `You are a policy analyst supporting an advocacy organisation's review of an Australian Federal Budget.
 
-Your job is to surface budget measures the organisation would want to know about but that are NOT already captured in their pre-budget submission's asks register.
+Your job is to read the organisation's STRATEGIC FOCUS and STRATEGIC PLAN below and surface budget measures that are meaningful to them given who they are and what they care about — the wins they would want to know about, and the risks they should be alert to.
+
+This is NOT about pre-budget submission asks. A separate section of the tool already covers those. You are looking at the budget through the lens of the organisation's strategic priorities, not their submission. Write in that frame: talk about the organisation's priorities, populations, policy areas, and strategic positioning — never about "asks" or the submission.
 
 ${focusContext}
 
@@ -2585,9 +2592,9 @@ Return ONLY a JSON object matching this schema exactly:
       "amount": "dollar figure as written in the budget, e.g. '$50.0 million over 4 years' or 'not costed'",
       "source": "document name (exact from the === markers)",
       "pdfPage": "page number as string",
-      "priorityArea": "which of the organisation's priority areas this touches (short phrase, drawn from the focus context)",
+      "priorityArea": "which of the organisation's strategic priority areas this touches (short phrase, drawn from the strategic focus/plan — NOT from submission asks)",
       "summary": "1-2 sentences describing what the measure does, in plain English",
-      "whyItMatters": "1-2 sentences explaining why this matters to this organisation given their focus",
+      "whyItMatters": "1-2 sentences explaining why this matters to this organisation given their strategic priorities. Do NOT reference their submission or asks — speak about their strategy, populations, and policy areas.",
       "quote": "verbatim excerpt from the budget text (1-3 sentences max)"
     }
   ],
@@ -2597,19 +2604,21 @@ Return ONLY a JSON object matching this schema exactly:
       "amount": "dollar figure as written in the budget, or 'not costed'",
       "source": "document name (exact from the === markers)",
       "pdfPage": "page number as string",
-      "priorityArea": "which of the organisation's priority areas this threatens (short phrase)",
+      "priorityArea": "which of the organisation's strategic priority areas this threatens (short phrase)",
       "summary": "1-2 sentences describing the measure",
-      "whyItMatters": "1-2 sentences explaining why this undercuts the organisation's strategic position",
+      "whyItMatters": "1-2 sentences explaining why this undercuts the organisation's strategic position. Speak about their strategy and the populations they serve — do NOT reference their submission or asks.",
       "quote": "verbatim excerpt from the budget text (1-3 sentences max)"
     }
   ]
 }
 
 Rules:
-- Only include budget measures genuinely relevant to the organisation's priority areas as stated in the focus context. Do not pad with generic measures.
-- Exclude anything that matches an item in the ALREADY-ASKED ITEMS list — those are already covered by the asks register.
-- For "unaskedPriorities": measures that the organisation would likely support or engage with, not in their submission.
-- For "risks": measures that work against the organisation's strategic position (cuts to relevant programs, expanded mutual obligations, reforms that undercut their advocacy, shifts of responsibility, etc.).
+- Frame everything through the organisation's STRATEGIC FOCUS and STRATEGIC PLAN. If neither is present, infer their priority areas from the submission asks, but still describe findings in terms of priorities and populations, not "asks".
+- Never use the words "ask", "asks", "submission", "pre-budget submission", or "asks register" in any output field. Those belong to the separate section of the tool, not this one.
+- Use the SUBMISSION ASKS block (if provided) ONLY to avoid surfacing budget measures that directly duplicate items already covered in the asks section.
+- Only include budget measures genuinely relevant to the organisation's strategic priorities. Do not pad with generic measures.
+- "unaskedPriorities" = budget measures the organisation would likely welcome, engage with, or want to capitalise on — things aligned with their strategy.
+- "risks" = budget measures that cut against the organisation's strategic position (reforms that undercut their advocacy, cuts to relevant programs, shifts that complicate service delivery, etc.).
 - Aim for 5-12 items per category. Fewer is fine if there's genuinely less to flag. Empty array is valid.
 - All quotes must be verbatim from the budget text. Do not invent measures or figures.
 - Sort each list by how significant the item is (most significant first).
