@@ -815,6 +815,7 @@
   <section class="card card-pad insights-section" id="insightsCard" style="display:none">
     <h2 style="margin:0 0 .35rem;font-size:var(--text-lg);font-weight:700">Insights beyond the asks</h2>
     <p class="lede" style="margin:0 0 .5rem">Budget measures relevant to your strategic priorities that weren't in the submission, plus budget measures that undercut your strategic position.</p>
+    <div id="insightsFocusNudge" style="display:none;margin:.25rem 0 .75rem;padding:.55rem .75rem;background:#f6f8fb;border:1px solid #e1e7ee;border-radius:8px;font-size:var(--text-sm);color:var(--text-muted)">Tip: add a strategic focus in Step 2 (a short brief or your strategic plan) to get insights tailored to your organisation's priorities. Without one, this section shows budget measures outside the scope of the submission's asks.</div>
     <div id="insightsBody"></div>
   </section>
 </div>
@@ -2190,12 +2191,14 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   }
   evalAbortController = null;
 
-  // Merged flow: if a focus brief or strategic plan is present, automatically
-  // kick off the insights pass so the user doesn't need a second click. The
-  // insights button remains hidden in the UI; its click handler does the work.
+  // Merged flow: after evaluation, automatically kick off the insights pass so
+  // the user doesn't need a second click. Fires whenever we have any usable
+  // context — focus brief, strategic plan, OR the asks register itself (which
+  // lets the AI surface budget measures outside the submission's scope).
+  // The insights button stays hidden in the UI; its click handler does the work.
   if (!signal.aborted) {
     const brief = (document.getElementById('focusBrief').value || '').trim();
-    const hasContext = brief || strategicPlan;
+    const hasContext = !!brief || !!strategicPlan || rows.length > 0;
     if (hasContext && budgetDocs.length) {
       const ibtn = document.getElementById('insightsBtn');
       if (ibtn && !ibtn.disabled) ibtn.click();
@@ -2552,6 +2555,14 @@ function renderInsights(data) {
   insightsData = data;
   const card = document.getElementById('insightsCard');
   const body = document.getElementById('insightsBody');
+  // Show the soft nudge only when no focus brief/plan was used (asks-only run).
+  const nudge = document.getElementById('insightsFocusNudge');
+  if (nudge) {
+    const briefEl = document.getElementById('focusBrief');
+    const hasBrief = !!(briefEl && briefEl.value && briefEl.value.trim());
+    const hasPlan = typeof strategicPlan !== 'undefined' && !!strategicPlan;
+    nudge.style.display = (hasBrief || hasPlan) ? 'none' : '';
+  }
   const priorities = Array.isArray(data?.unaskedPriorities) ? data.unaskedPriorities : [];
   const risks = Array.isArray(data?.risks) ? data.risks : [];
 
