@@ -615,7 +615,8 @@
     .budget-countdown-unit{min-width:1.75rem}
   }
 </style>
-<script src="shared.js"></script>
+<!-- BUILD_STAMP: replaced with commit SHA at deploy time for cache-busting -->
+<script src="shared.js?v=BUILD_STAMP"></script>
 <script>
 // Early-run: if the URL carries a preset slug, tag <html> so CSS can hide the
 // tool underneath and show the welcome screen immediately — prevents any
@@ -685,6 +686,7 @@
   <div class="welcome-footer">
     <span class="welcome-footer-label">Powered by</span>
     <span class="welcome-footer-brand">PolicyPatch</span>
+    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build BUILD_STAMP</span>
   </div>
 </section>
 
@@ -980,8 +982,7 @@ function render() {
 // Returns the short/display version of an ask for the table + CSV.
 // Prefers the AI-supplied askShort. If absent and the verbatim ask is long,
 // truncate at the last complete sentence that keeps the result reasonably
-// short — never cut mid-word or mid-clause. If no sentence boundary gives a
-// usable length, fall back to the AI short if available, else the full text.
+// short — never cut mid-word, mid-clause, or on an abbreviation's period.
 function getDisplayAsk(row) {
   if (row.askShort) return row.askShort;
   if (!row.ask) return '';
@@ -989,31 +990,37 @@ function getDisplayAsk(row) {
   const words = full.split(/\s+/);
   if (words.length <= 50) return full;
 
-  // Split into sentences on terminator + space/end. Keep the terminator with
-  // each sentence. Common terminators: . ! ? and the closing quote variants
-  // we see in submission PDFs (', ”).
-  const sentences = full.match(/[^.!?]+[.!?]['”]*(?=\s|$)/g);
-  if (sentences && sentences.length > 1) {
-    // Accumulate whole sentences while we're under 60 words. This lets us
-    // end on a clean sentence boundary naturally — one full sentence for
-    // short-first-sentence asks, two if the first is tiny, etc.
+  // Split into real sentences. A real sentence boundary is a terminator (. ! ?)
+  // followed by whitespace + a capital letter or the string's end. This rules
+  // out abbreviation dots like "e.g.", "i.e.", "Dr.", "Mr.", "St.", "No. 3",
+  // "vol. 4", single-letter acronyms etc. — which was the cause of the "g. )."
+  // fragment. We also require the resulting sentence to contain at least 8
+  // words, so nothing tiny like "(e.g.)" survives as a standalone sentence.
+  const rawChunks = full.split(/(?<=[.!?]['”]?)\s+(?=[A-Z])/);
+  const sentences = rawChunks
+    .map(s => s.trim())
+    .filter(s => s.length > 0);
+
+  if (sentences.length > 1) {
     let built = '';
     let builtWords = 0;
     for (const s of sentences) {
-      const sWords = s.trim().split(/\s+/).length;
+      const sWords = s.split(/\s+/).length;
+      // Skip implausibly short fragments (e.g. orphaned "e.g.)") unless
+      // that's genuinely all we have.
+      if (sWords < 5 && built) continue;
       if (builtWords + sWords > 60 && built) break;
-      built += (built ? ' ' : '') + s.trim();
+      built += (built ? ' ' : '') + s;
       builtWords += sWords;
-      if (builtWords >= 25) break; // enough for a meaningful lede
+      if (builtWords >= 25) break;
     }
-    if (built) return built;
+    if (built && built.split(/\s+/).length >= 8) return built;
   }
-  // Fallback: single very long sentence with no internal terminators.
-  // Prefer cutting at a semicolon or colon before giving up on truncation.
+
+  // Fallback: no usable sentence boundary. Cut at the nearest semicolon or
+  // colon before ~400 chars; else return the full verbatim text (table wraps).
   const clauseBreak = full.search(/[;:]/);
-  if (clauseBreak > 0 && clauseBreak < 400) return full.slice(0, clauseBreak) + '.';
-  // Last resort: return the full verbatim text. Table cell wraps — ugly but
-  // complete, never mid-word.
+  if (clauseBreak > 40 && clauseBreak < 400) return full.slice(0, clauseBreak) + '.';
   return full;
 }
 
