@@ -2158,13 +2158,15 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
       failed++;
       failures.push({ ask: row.ask.slice(0, 80), reason: err.name === 'AbortError' ? 'timed out, will retry on next click' : (err.message || 'unknown error') });
     }
-    // Space calls out by ~3s so we stay under both providers' per-minute
-    // rate limits when asks run back-to-back. Skipped after the last ask and
-    // if the user aborts mid-run. Adds ~30s to a 10-ask evaluation, negligible
-    // versus the several minutes each ask already takes.
+    // Space calls out by ~8s so we stay under both providers' per-minute
+    // rate limits when asks run back-to-back, even for larger submissions
+    // (15+ asks) where tighter spacing was tripping Claude Tier 2's ITPM cap
+    // mid-run. Skipped after the last ask and if the user aborts mid-run.
+    // Adds ~85s to a 17-ask evaluation — negligible versus the several
+    // minutes each ask already takes, and the reliability win is worth it.
     if (processed < pendingRows.length && !signal.aborted) {
       await new Promise(resolve => {
-        const timer = setTimeout(resolve, 3000);
+        const timer = setTimeout(resolve, 8000);
         signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
       });
     }
