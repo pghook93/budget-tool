@@ -187,13 +187,32 @@
   .insight-tag{display:inline-block;padding:.15rem .5rem;border-radius:999px;
     font-size:.7rem;font-weight:600;background:var(--surface);
     border:1px solid var(--border);color:var(--text-muted);margin-right:.35rem}
+  /* Preset banner */
+  .preset-banner{margin-bottom:1rem;padding:.85rem 1.1rem;border-radius:var(--radius-md);
+    border:1px solid var(--border);background:var(--surface);box-shadow:var(--shadow-sm);
+    display:flex;align-items:center;gap:.75rem;font-size:var(--text-sm);color:var(--text);
+    line-height:1.5}
+  .preset-banner.rehearsal{background:#fdf7e7;border-color:#e8d98c}
+  .preset-banner.live{background:var(--primary-tint);border-color:#b7d6d3}
+  .preset-banner .preset-banner-tag{display:inline-flex;align-items:center;
+    padding:.2rem .55rem;border-radius:999px;font-size:var(--text-2xs);font-weight:700;
+    letter-spacing:.08em;text-transform:uppercase;background:var(--surface);
+    border:1px solid var(--border);flex-shrink:0}
+  .preset-banner.rehearsal .preset-banner-tag{color:#8a6d00;border-color:#e3ca58;background:#fff}
+  .preset-banner.live .preset-banner-tag{color:var(--primary);border-color:#b7d6d3;background:#fff}
+  .preset-banner .preset-banner-body{flex:1;min-width:0}
+  .preset-banner .preset-banner-title{font-weight:700;margin:0 0 .15rem;font-size:var(--text-sm)}
+  .preset-banner .preset-banner-meta{color:var(--text-muted);font-size:var(--text-xs);margin:0}
+  .preset-banner .preset-banner-error{color:var(--error);font-weight:600}
 </style>
 </head>
 <body>
 <div class="shell">
 
+  <div id="presetBanner" class="preset-banner" style="display:none"></div>
+
   <section class="card card-pad">
-    <h1>Ask register</h1>
+    <h1 id="pageTitle">Ask register</h1>
     <p class="lede">Upload a pre-budget submission and one or more budget documents. The tool extracts each recommendation verbatim, then evaluates whether the budget reflects it. Every row links back to the full justification and supporting quotes.</p>
 
     <div class="step-stack">
@@ -1931,6 +1950,128 @@ updateInsightsButtonState();
 
 updateEvaluateButtonState();
 render();
+
+// ============================================================================
+// Stateful link hydration: ?c=<slug> pre-loads an org's submission asks.
+// Viewers still upload budget PDFs themselves (nothing is pre-loaded for budget).
+// ============================================================================
+const WORKER_BASE = GEMINI_ENDPOINT.replace(/\/+$/, '');
+
+function showPresetBanner({ label, linkType, orgName, submissionName, banner, error }) {
+  const el = document.getElementById('presetBanner');
+  if (!el) return;
+  el.className = 'preset-banner' + (linkType === 'rehearsal' ? ' rehearsal'
+    : linkType === 'live' ? ' live' : '');
+  if (error) {
+    el.innerHTML = `<span class="preset-banner-tag">Link</span>`
+      + `<div class="preset-banner-body"><p class="preset-banner-title preset-banner-error">`
+      + escapeHtml(error) + `</p><p class="preset-banner-meta">`
+      + `Continue and upload your submission and budget PDFs manually, or check the link with your ACOSS contact.</p></div>`;
+    el.style.display = 'flex';
+    return;
+  }
+  const tag = linkType === 'rehearsal' ? 'Rehearsal'
+           : linkType === 'live' ? 'Budget night' : 'Preloaded';
+  const title = escapeHtml(label || orgName || 'Preloaded asks');
+  const metaParts = [];
+  if (orgName && label && orgName !== label) metaParts.push(escapeHtml(orgName));
+  if (submissionName) metaParts.push('Submission: ' + escapeHtml(submissionName));
+  if (banner && banner.trim()) metaParts.unshift(escapeHtml(banner.trim()));
+  const meta = metaParts.join(' · ');
+  el.innerHTML = `<span class="preset-banner-tag">${escapeHtml(tag)}</span>`
+    + `<div class="preset-banner-body">`
+    + `<p class="preset-banner-title">${title}</p>`
+    + (meta ? `<p class="preset-banner-meta">${meta}</p>` : '')
+    + `</div>`;
+  el.style.display = 'flex';
+}
+
+function rowsFromPreset(preset) {
+  const src = Array.isArray(preset.rows) ? preset.rows : [];
+  return src.map((r, i) => ({
+    id: i + 1,
+    overarching: cleanOverarching(r.overarching || ''),
+    ask: cleanAskText(r.ask || ''),
+    askPage: String(r.askPage == null ? '' : r.askPage).trim(),
+    verdict: 'Not yet evaluated',
+    plainIssue: 'No budget-response analysis has been run against this ask yet. Upload budget documents and click "Evaluate all asks" to assess alignment.',
+    rule: 'Awaiting evaluation. This ask has been extracted from the uploaded submission but has not yet been checked against any budget document.',
+    evidenceItems: []
+  })).filter(r => r.ask);
+}
+
+async function hydrateFromPreset() {
+  const params = new URLSearchParams(window.location.search);
+  const slug = (params.get('c') || '').trim();
+  if (!slug) return;
+  // Optimistic: tell the user we're loading a preset so the landing view
+  // doesn't look empty for a second.
+  setUploadStatus('Loading preloaded asks…', 'working');
+  try {
+    const res = await fetch(WORKER_BASE + '/preset/get', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ slug })
+    });
+    if (res.status === 404) {
+      showPresetBanner({ error: 'This preloaded link was not found.' });
+      setUploadStatus('No submission loaded. Upload a pre-budget submission PDF to begin.', '');
+      return;
+    }
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      showPresetBanner({ error: `Could not load preloaded asks (HTTP ${res.status}).` });
+      setUploadStatus('No submission loaded. Upload a pre-budget submission PDF to begin.', '');
+      console.warn('Preset load failed', res.status, detail);
+      return;
+    }
+    const preset = await res.json();
+    const preRows = rowsFromPreset(preset);
+    if (!preRows.length) {
+      showPresetBanner({
+        label: preset.label, linkType: preset.linkType, orgName: preset.orgName,
+        submissionName: preset.submissionName, banner: preset.banner,
+        error: 'This preloaded link has no asks saved.'
+      });
+      setUploadStatus('No submission loaded. Upload a pre-budget submission PDF to begin.', '');
+    } else {
+      rows = preRows;
+      recomputePageGroups();
+      state.filters = { overarching:'All', ask:'All', verdict:'All', pageGroup:'All' };
+      state.search = '';
+      state.selectedId = null;
+      const sb = document.getElementById('searchBox');
+      if (sb) sb.value = '';
+      render();
+      updateEvaluateButtonState();
+      if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
+      showPresetBanner({
+        label: preset.label, linkType: preset.linkType, orgName: preset.orgName,
+        submissionName: preset.submissionName, banner: preset.banner
+      });
+      const submissionLabel = preset.submissionName ? `"${preset.submissionName}"` : 'the preloaded submission';
+      setUploadStatus(
+        `Loaded ${preRows.length} preloaded ask${preRows.length === 1 ? '' : 's'} from ${submissionLabel}. `
+        + `Now upload your budget PDFs (BP2, PBS) in Step 2, then click "Evaluate all asks" in Step 3.`,
+        'ok'
+      );
+    }
+    // Fire-and-forget open-analytics ping. Never block the UI on this.
+    try {
+      fetch(WORKER_BASE + '/preset/open', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ slug })
+      }).catch(() => {});
+    } catch (_) { /* ignore */ }
+  } catch (err) {
+    console.error('Preset hydration failed', err);
+    showPresetBanner({ error: 'Could not load preloaded asks (network error).' });
+    setUploadStatus('No submission loaded. Upload a pre-budget submission PDF to begin.', '');
+  }
+}
+
+hydrateFromPreset();
 </script>
 </body>
 </html>
