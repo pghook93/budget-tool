@@ -826,53 +826,204 @@ SUBMISSION TEXT:
 ${joined}`;
 }
 
-async function callGemini(prompt, onTick) {
+// ---------------------------------------------------------------------------
+// Gemini calls: single-attempt + retry wrapper shared across extraction,
+// evaluation, and insights. The Cloudflare Worker now bounds every call
+// to ~95s, so the retry wrapper lives here on the client.
+// ---------------------------------------------------------------------------
+
+// Statuses we should retry rather than surface: Cloudflare 524 (origin
+// timeout), standard gateway errors, rate limits, and our own Worker 504.
+const RETRYABLE_HTTP_STATUSES = new Set([408, 429, 500, 502, 503, 504, 520, 521, 522, 523, 524, 525, 526, 527, 530]);
+const CALL_ATTEMPT_TIMEOUT_MS = 110000;  // slightly over CF's 100s ceiling
+const MAX_CALL_ATTEMPTS = 3;
+
+// One attempt. Throws with err.retryable=true when the caller should retry.
+async function geminiFetchOnce({ prompt, temperature = 0.1, signal, onTick }) {
   const body = {
     contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: {
-      temperature: 0.1,
-      responseMimeType: 'application/json'
-    }
+    generationConfig: { temperature, responseMimeType: 'application/json' }
   };
-  // 3-minute timeout. Long submissions can take 60-90s on Gemini 2.5 Flash.
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 180000);
+  const attemptController = new AbortController();
+  const timeoutId = setTimeout(() => attemptController.abort('timeout'), CALL_ATTEMPT_TIMEOUT_MS);
+  // If a caller-level AbortController is provided, propagate its abort to
+  // our attempt controller so user-initiated Stop still works.
+  const onCallerAbort = () => attemptController.abort('caller-aborted');
+  if (signal) {
+    if (signal.aborted) attemptController.abort('caller-aborted');
+    signal.addEventListener('abort', onCallerAbort, { once: true });
+  }
   const startedAt = Date.now();
-  const tickId = setInterval(() => {
-    if (onTick) onTick(Math.round((Date.now() - startedAt) / 1000));
-  }, 2000);
+  const tickId = onTick ? setInterval(() => {
+    onTick(Math.round((Date.now() - startedAt) / 1000));
+  }, 2000) : null;
+
   let res;
   try {
     res = await fetch(GEMINI_ENDPOINT, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify(body),
-      signal: controller.signal
+      signal: attemptController.signal,
     });
   } catch (e) {
+    if (tickId) clearInterval(tickId);
     clearTimeout(timeoutId);
-    clearInterval(tickId);
-    if (e.name === 'AbortError') throw new Error('Gemini request timed out after 3 minutes. Try a smaller PDF or retry.');
-    throw new Error(`Network error reaching Gemini: ${e.message}. This is usually a connection drop — retry the upload.`);
+    if (signal) signal.removeEventListener('abort', onCallerAbort);
+    // User-initiated abort: propagate as-is, not retryable.
+    if (signal && signal.aborted) {
+      const ae = new Error('User cancelled');
+      ae.name = 'AbortError';
+      throw ae;
+    }
+    // Per-attempt timeout or network drop: retryable.
+    const err = new Error(e && e.name === 'AbortError'
+      ? `Request timed out after ${Math.round(CALL_ATTEMPT_TIMEOUT_MS/1000)}s`
+      : `Network error: ${e && e.message ? e.message : e}`);
+    err.retryable = true;
+    throw err;
+  } finally {
+    clearTimeout(timeoutId);
+    if (tickId) clearInterval(tickId);
+    if (signal) signal.removeEventListener('abort', onCallerAbort);
   }
-  clearTimeout(timeoutId);
-  clearInterval(tickId);
+
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
-    throw new Error(`Worker returned ${res.status}: ${errText.slice(0, 300)}`);
+    const err = new Error(`Worker returned ${res.status}: ${errText.slice(0, 300)}`);
+    err.status = res.status;
+    err.retryable = RETRYABLE_HTTP_STATUSES.has(res.status);
+    throw err;
   }
+
   const data = await res.json();
   const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
   if (!text) {
     const finish = data?.candidates?.[0]?.finishReason || 'unknown';
-    throw new Error(`Gemini returned empty response (finishReason: ${finish}). Try a smaller PDF.`);
+    // Empty responses with MAX_TOKENS can occasionally be transient under load — retry once.
+    const err = new Error(`Gemini returned empty response (finishReason: ${finish}).`);
+    err.retryable = (finish === 'OTHER' || finish === 'unknown');
+    throw err;
   }
   try {
     return JSON.parse(text);
   } catch (e) {
     const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
-    return JSON.parse(cleaned);
+    return JSON.parse(cleaned); // if this throws too, it bubbles up as non-retryable
   }
+}
+
+// Retry wrapper. statusFn is optional — we call it with a human-readable
+// message on each retry so the UI can update mid-flight.
+async function geminiFetchWithRetry(opts, statusFn) {
+  let lastErr = null;
+  for (let attempt = 1; attempt <= MAX_CALL_ATTEMPTS; attempt++) {
+    try {
+      return await geminiFetchOnce(opts);
+    } catch (err) {
+      lastErr = err;
+      // User cancellation bubbles immediately.
+      if (err.name === 'AbortError') throw err;
+      // Not retryable: surface now.
+      if (!err.retryable) throw err;
+      // Out of attempts: surface with friendlier context.
+      if (attempt === MAX_CALL_ATTEMPTS) break;
+      const backoffMs = 1500 * Math.pow(2, attempt - 1); // 1.5s, 3s
+      if (statusFn) {
+        const reason = err.status ? `Gemini is slow (${err.status})` : 'connection hiccup';
+        statusFn(`${reason} — retrying (attempt ${attempt + 1} of ${MAX_CALL_ATTEMPTS})…`);
+      }
+      await new Promise(r => setTimeout(r, backoffMs));
+    }
+  }
+  // Friendlier final message for the most common failure mode.
+  const msg = lastErr && lastErr.status === 524
+    ? 'Gemini timed out extracting this document. For long PDFs (50+ pages) this can happen under load. Try again in a minute, or split the PDF into smaller files.'
+    : (lastErr && lastErr.message) || 'Unknown error after retries.';
+  const out = new Error(msg);
+  if (lastErr && lastErr.status) out.status = lastErr.status;
+  throw out;
+}
+
+// Back-compat shim for existing callers that used callGemini(prompt, onTick).
+async function callGemini(prompt, onTick) {
+  return geminiFetchWithRetry({ prompt, temperature: 0.1, onTick });
+}
+
+// ---------------------------------------------------------------------------
+// Chunked extraction: splits long PDFs into overlapping page ranges so no
+// single Gemini call needs more than ~90s. Each chunk is extracted
+// independently, then rows are merged and deduplicated by verbatim ask text.
+// ---------------------------------------------------------------------------
+
+const CHUNK_THRESHOLD_PAGES = 35;  // below this, one call handles the whole doc
+const CHUNK_SIZE_PAGES = 25;       // pages per chunk
+const CHUNK_OVERLAP_PAGES = 3;     // overlap catches asks that straddle a chunk boundary
+
+function chunkPages(pages) {
+  if (pages.length <= CHUNK_THRESHOLD_PAGES) return [pages];
+  const chunks = [];
+  let start = 0;
+  while (start < pages.length) {
+    const end = Math.min(start + CHUNK_SIZE_PAGES, pages.length);
+    chunks.push(pages.slice(start, end));
+    if (end >= pages.length) break;
+    start = end - CHUNK_OVERLAP_PAGES;
+  }
+  return chunks;
+}
+
+function normAskForDedupe(s) {
+  return String(s || '').toLowerCase().replace(/\s+/g, ' ').replace(/[\u2018\u2019\u201c\u201d"'`]/g, '').trim();
+}
+
+async function extractAsksFromPages(pages, statusFn) {
+  const chunks = chunkPages(pages);
+  if (chunks.length === 1) {
+    // Fast path — single call, existing behaviour.
+    const prompt = buildExtractionPrompt(pages);
+    const extracted = await geminiFetchWithRetry(
+      { prompt, temperature: 0.1, onTick: (secs) => statusFn(`Extracting recommendations with Gemini… ${secs}s elapsed (please don't close the tab)`) },
+      statusFn
+    );
+    return extracted;
+  }
+
+  // Chunked path.
+  statusFn(`Document is ${pages.length} pages — splitting into ${chunks.length} chunks for reliable extraction…`);
+  const allRows = [];
+  for (let i = 0; i < chunks.length; i++) {
+    const chunk = chunks[i];
+    const firstPage = chunk[0].page;
+    const lastPage = chunk[chunk.length - 1].page;
+    const chunkLabel = `chunk ${i + 1}/${chunks.length} (pages ${firstPage}–${lastPage})`;
+    const prompt = buildExtractionPrompt(chunk);
+    try {
+      const extracted = await geminiFetchWithRetry(
+        { prompt, temperature: 0.1, onTick: (secs) => statusFn(`Extracting ${chunkLabel}… ${secs}s elapsed`) },
+        (msg) => statusFn(`${chunkLabel}: ${msg}`)
+      );
+      if (extracted && Array.isArray(extracted.rows)) {
+        allRows.push(...extracted.rows);
+        statusFn(`Extracted ${chunk.length} pages (${chunkLabel}) — ${allRows.length} asks so far…`);
+      }
+    } catch (err) {
+      // One failed chunk shouldn't kill the whole extraction. Log and continue.
+      console.error(`Extraction failed for ${chunkLabel}:`, err);
+      statusFn(`Warning: ${chunkLabel} failed (${err.message}). Continuing with remaining chunks…`);
+    }
+  }
+
+  // Dedupe across overlapping chunks by normalised ask text.
+  const seen = new Set();
+  const deduped = [];
+  for (const r of allRows) {
+    const key = normAskForDedupe(r.ask);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    deduped.push(r);
+  }
+  return { rows: deduped };
 }
 
 function rowsFromExtraction(extracted) {
@@ -898,11 +1049,11 @@ document.getElementById('pdfUpload').addEventListener('change', async (e) => {
     setUploadStatus(`Reading "${file.name}"…`, 'working');
     const pages = await extractPdfText(file);
     const totalChars = pages.reduce((n, p) => n + p.text.length, 0);
-    setUploadStatus(`Read ${pages.length} pages (${totalChars.toLocaleString()} chars). Extracting recommendations with Gemini… (this can take 60-120s for long PDFs — please don't close the tab)`, 'working');
-    const prompt = buildExtractionPrompt(pages);
-    const extracted = await callGemini(prompt, (secs) => {
-      setUploadStatus(`Extracting recommendations with Gemini… ${secs}s elapsed (this can take 60-120s for long PDFs — please don't close the tab)`, 'working');
-    });
+    const lengthHint = pages.length > CHUNK_THRESHOLD_PAGES
+      ? `Long document (${pages.length} pages) — extraction will run in chunks for reliability.`
+      : `This can take 60-120s — please don't close the tab.`;
+    setUploadStatus(`Read ${pages.length} pages (${totalChars.toLocaleString()} chars). ${lengthHint}`, 'working');
+    const extracted = await extractAsksFromPages(pages, (msg) => setUploadStatus(msg, 'working'));
     const newRows = rowsFromExtraction(extracted);
     if (!newRows.length) {
       setUploadStatus('No recommendations found in this PDF. Check the document, or reset to the ACOSS sample.', 'error');
@@ -1049,35 +1200,9 @@ Rules:
 - Return ONLY the JSON object. No prose, no code fences.`;
 }
 
-async function evaluateOneAsk(row, corpus, signal) {
+async function evaluateOneAsk(row, corpus, signal, retryStatusFn) {
   const prompt = buildEvaluationPrompt(row.ask, row.overarching, corpus);
-  const body = {
-    contents: [{ role: 'user', parts: [{ text: prompt }] }],
-    generationConfig: { temperature: 0.1, responseMimeType: 'application/json' }
-  };
-  const res = await fetch(GEMINI_ENDPOINT, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(body),
-    signal
-  });
-  if (!res.ok) {
-    const errText = await res.text().catch(() => '');
-    throw new Error(`Worker ${res.status}: ${errText.slice(0, 200)}`);
-  }
-  const data = await res.json();
-  const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-  if (!text) {
-    const finish = data?.candidates?.[0]?.finishReason || 'unknown';
-    throw new Error(`Empty response (${finish})`);
-  }
-  let parsed;
-  try { parsed = JSON.parse(text); }
-  catch (e) {
-    const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
-    parsed = JSON.parse(cleaned);
-  }
-  return parsed;
+  return geminiFetchWithRetry({ prompt, temperature: 0.1, signal }, retryStatusFn);
 }
 
 function applyEvaluationToRow(row, result) {
@@ -1132,7 +1257,9 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
     try {
       const elapsed = Math.round((Date.now() - startedAt) / 1000);
       setEvalStatus(`Evaluating ${processed}/${pendingRows.length}: "${row.ask.slice(0, 80)}…" · ${elapsed}s elapsed`, 'working');
-      const result = await evaluateOneAsk(row, corpus, signal);
+      const result = await evaluateOneAsk(row, corpus, signal, (msg) => {
+        setEvalStatus(`Evaluating ${processed}/${pendingRows.length} — ${msg}`, 'working');
+      });
       applyEvaluationToRow(row, result);
       succeeded++;
       render();
@@ -1384,45 +1511,23 @@ document.getElementById('insightsBtn').addEventListener('click', async () => {
 
   setInsightsStatus(`Generating insights against ${corpus.length.toLocaleString()} chars of budget text… (typically 45-90s)`, 'working');
   const startedAt = Date.now();
-  const tick = setInterval(() => {
-    const s = Math.round((Date.now() - startedAt) / 1000);
-    setInsightsStatus(`Generating insights… ${s}s elapsed`, 'working');
-  }, 2000);
 
   try {
-    const res = await fetch(GEMINI_ENDPOINT, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        contents: [{ role: 'user', parts: [{ text: prompt }] }],
-        generationConfig: { temperature: 0.3, responseMimeType: 'application/json' }
-      }),
-      signal
-    });
-    clearInterval(tick);
-    if (!res.ok) {
-      const err = await res.text().catch(() => '');
-      throw new Error(`Worker ${res.status}: ${err.slice(0, 200)}`);
-    }
-    const data = await res.json();
-    const text = data?.candidates?.[0]?.content?.parts?.[0]?.text || '';
-    if (!text) {
-      const finish = data?.candidates?.[0]?.finishReason || 'unknown';
-      throw new Error(`Empty response (${finish})`);
-    }
-    let parsed;
-    try { parsed = JSON.parse(text); }
-    catch (e) {
-      const cleaned = text.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/, '');
-      parsed = JSON.parse(cleaned);
-    }
+    const parsed = await geminiFetchWithRetry(
+      {
+        prompt,
+        temperature: 0.3,
+        signal,
+        onTick: (s) => setInsightsStatus(`Generating insights… ${s}s elapsed`, 'working'),
+      },
+      (msg) => setInsightsStatus(`Insights: ${msg}`, 'working')
+    );
     renderInsights(parsed);
     const totalElapsed = Math.round((Date.now() - startedAt) / 1000);
     const pCount = parsed?.unaskedPriorities?.length || 0;
     const rCount = parsed?.risks?.length || 0;
     setInsightsStatus(`Insights generated in ${totalElapsed}s · ${pCount} unasked priorities, ${rCount} risks.`, 'ok');
   } catch (err) {
-    clearInterval(tick);
     if (err.name !== 'AbortError') {
       console.error(err);
       setInsightsStatus(`Insight generation failed: ${err.message}`, 'error');
