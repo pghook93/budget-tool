@@ -187,83 +187,155 @@
   .insight-tag{display:inline-block;padding:.15rem .5rem;border-radius:999px;
     font-size:.7rem;font-weight:600;background:var(--surface);
     border:1px solid var(--border);color:var(--text-muted);margin-right:.35rem}
-  /* Preset banner */
-  .preset-banner{margin-bottom:1rem;padding:.85rem 1.1rem;border-radius:var(--radius-md);
-    border:1px solid var(--border);background:var(--surface);box-shadow:var(--shadow-sm);
-    display:flex;align-items:center;gap:.75rem;font-size:var(--text-sm);color:var(--text);
-    line-height:1.5}
-  .preset-banner.rehearsal{background:#fdf7e7;border-color:#e8d98c}
-  .preset-banner.live{background:var(--primary-tint);border-color:#b7d6d3}
-  .preset-banner .preset-banner-tag{display:inline-flex;align-items:center;
-    padding:.2rem .55rem;border-radius:999px;font-size:var(--text-2xs);font-weight:700;
-    letter-spacing:.08em;text-transform:uppercase;background:var(--surface);
-    border:1px solid var(--border);flex-shrink:0}
-  .preset-banner.rehearsal .preset-banner-tag{color:#8a6d00;border-color:#e3ca58;background:#fff}
-  .preset-banner.live .preset-banner-tag{color:var(--primary);border-color:#b7d6d3;background:#fff}
-  .preset-banner .preset-banner-body{flex:1;min-width:0}
-  .preset-banner .preset-banner-title{font-weight:700;margin:0 0 .15rem;font-size:var(--text-sm)}
-  .preset-banner .preset-banner-meta{color:var(--text-muted);font-size:var(--text-xs);margin:0}
-  .preset-banner .preset-banner-error{color:var(--error);font-weight:600}
+  /* ========================================================================
+     Progress stepper — horizontal, three states per node.
+     Node states: .is-done (muted tick), .is-current (highlighted), .is-locked.
+     ========================================================================*/
+  .stepper{display:grid;grid-template-columns:repeat(3,1fr);gap:0;
+    margin:1rem 0 1.25rem;border:1px solid var(--border);border-radius:var(--radius-md);
+    background:var(--surface);overflow:hidden}
+  .stepper-node{position:relative;padding:1rem 1.1rem 1.1rem;
+    border-right:1px solid var(--border);min-width:0}
+  .stepper-node:last-child{border-right:0}
+  .stepper-node + .stepper-node::before{content:"";position:absolute;left:-1px;top:50%;
+    width:10px;height:10px;border-radius:50%;transform:translate(-50%,-50%);
+    background:var(--border);z-index:1}
+  .stepper-head{display:flex;align-items:center;gap:.55rem;margin:0 0 .45rem;
+    font-size:var(--text-xs);letter-spacing:.06em;text-transform:uppercase;
+    color:var(--text-muted);font-weight:700}
+  .stepper-num{display:inline-flex;align-items:center;justify-content:center;
+    width:22px;height:22px;border-radius:50%;font-size:var(--text-2xs);
+    background:var(--surface-2);border:1px solid var(--border);color:var(--text-muted)}
+  .stepper-title{font-size:var(--text-sm);font-weight:700;color:var(--text);
+    letter-spacing:0;text-transform:none;margin:0 0 .35rem;line-height:1.25}
+  .stepper-body{font-size:var(--text-sm);color:var(--text);min-height:2.6rem}
+  .stepper-action{margin-top:.65rem;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
+  .stepper-node.is-done{background:#f4faf8}
+  .stepper-node.is-done .stepper-num{background:var(--primary);border-color:var(--primary);color:#fff}
+  .stepper-node.is-done .stepper-num::after{content:"✓";font-size:.75rem;font-weight:700}
+  .stepper-node.is-done .stepper-num > span{display:none}
+  .stepper-node.is-current{background:#fffdf3}
+  .stepper-node.is-current .stepper-num{background:#f2d96d;border-color:#e3ca58;color:#4a3c00}
+  .stepper-node.is-locked{background:var(--surface)}
+  .stepper-node.is-locked .stepper-title,
+  .stepper-node.is-locked .stepper-body{color:var(--text-muted);opacity:.7}
+  .stepper-node.is-locked .stepper-action{display:none}
+  .stepper-tag{display:inline-flex;align-items:center;padding:.15rem .5rem;
+    border-radius:999px;font-size:var(--text-2xs);font-weight:700;
+    letter-spacing:.06em;text-transform:uppercase;background:#fff;
+    border:1px solid var(--border);color:var(--text-muted);margin-left:auto}
+  .stepper-node.rehearsal .stepper-tag{color:#8a6d00;border-color:#e3ca58}
+  .stepper-node.live .stepper-tag{color:var(--primary);border-color:#b7d6d3}
+  .stepper-sub{font-size:var(--text-xs);color:var(--text-muted);margin:.2rem 0 0}
+  .stepper-error{color:var(--error);font-weight:600}
+  .stepper-link{background:none;border:0;color:var(--primary);padding:0;
+    font:inherit;text-decoration:underline;cursor:pointer;font-size:var(--text-xs)}
+  .stepper-link:hover{color:var(--primary-soft);text-decoration:none}
+  @media (max-width: 720px){
+    .stepper{grid-template-columns:1fr}
+    .stepper-node{border-right:0;border-bottom:1px solid var(--border)}
+    .stepper-node:last-child{border-bottom:0}
+    .stepper-node + .stepper-node::before{display:none}
+  }
+
+  /* Verdict-count tiles above the register — click to filter. */
+  .verdict-tiles{display:grid;grid-template-columns:repeat(5,1fr);gap:.5rem;
+    margin:0 0 1rem;display:none}
+  .verdict-tiles.is-visible{display:grid}
+  .verdict-tile{display:flex;flex-direction:column;align-items:flex-start;
+    padding:.7rem .85rem;background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius-md);cursor:pointer;transition:all .15s ease;
+    text-align:left;font:inherit}
+  .verdict-tile:hover{border-color:var(--primary);box-shadow:var(--shadow-sm)}
+  .verdict-tile.is-active{background:var(--primary-tint);border-color:var(--primary)}
+  .verdict-tile-count{font-size:1.5rem;font-weight:700;line-height:1;
+    font-variant-numeric:tabular-nums}
+  .verdict-tile-label{font-size:var(--text-xs);color:var(--text-muted);
+    margin-top:.2rem;letter-spacing:.02em}
+  .verdict-tile-accent{width:28px;height:3px;border-radius:3px;margin-top:.4rem}
+  .verdict-tile[data-verdict="Directly reflected"] .verdict-tile-accent{background:#2f7a3d}
+  .verdict-tile[data-verdict="Partially reflected"] .verdict-tile-accent{background:#5a8aa3}
+  .verdict-tile[data-verdict="Adjacent"] .verdict-tile-accent{background:#b48500}
+  .verdict-tile[data-verdict="Not reflected"] .verdict-tile-accent{background:#a64b3a}
+  .verdict-tile[data-verdict="Unclear"] .verdict-tile-accent{background:#7a7a7a}
+  @media (max-width: 720px){
+    .verdict-tiles{grid-template-columns:repeat(2,1fr)}
+    .verdict-tile-count{font-size:1.25rem}
+  }
 </style>
 <script src="shared.js"></script>
 </head>
 <body>
 <div class="shell">
 
-  <div id="presetBanner" class="preset-banner" style="display:none"></div>
-
   <section class="card card-pad">
     <h1 id="pageTitle">Ask register</h1>
     <p class="lede">Upload a pre-budget submission and one or more budget documents. The tool extracts each recommendation verbatim, then evaluates whether the budget reflects it. Every row links back to the full justification and supporting quotes.</p>
 
-    <div class="step-stack">
-      <div class="step" id="step1">
-        <div class="step-label">
-          <span class="step-num">1</span>
-          <span class="step-title">Submission</span>
+    <!-- Horizontal 3-step progress tracker. States: is-done / is-current / is-locked. -->
+    <div class="stepper" id="stepper">
+      <div class="stepper-node is-current" id="step1Node">
+        <div class="stepper-head">
+          <span class="stepper-num"><span>1</span></span>
+          <span>Submission</span>
+          <span class="stepper-tag" id="step1Tag" style="display:none"></span>
         </div>
-        <label class="btn primary" for="pdfUpload">Upload submission PDF</label>
-        <input type="file" id="pdfUpload" accept="application/pdf,.pdf" />
-        <span class="upload-status" id="uploadStatus">No submission loaded. Upload a pre-budget submission PDF to begin.</span>
+        <div class="stepper-title" id="step1Title">Upload a pre-budget submission</div>
+        <div class="stepper-body" id="step1Body">PDF of the organisation's submission. The tool extracts asks automatically.</div>
+        <div class="stepper-action" id="step1Action">
+          <label class="btn primary" for="pdfUpload">Upload submission</label>
+          <input type="file" id="pdfUpload" accept="application/pdf,.pdf" />
+        </div>
+        <!-- Hidden but preserved: existing code still setUploadStatus() into this element. -->
+        <span class="upload-status" id="uploadStatus" style="display:none"></span>
       </div>
 
-      <div class="step" id="step2">
-        <div class="step-label">
-          <span class="step-num">2</span>
-          <span class="step-title">Budget documents</span>
+      <div class="stepper-node is-locked" id="step2Node">
+        <div class="stepper-head">
+          <span class="stepper-num"><span>2</span></span>
+          <span>Budget documents</span>
         </div>
-        <label class="btn primary" for="budgetUpload">Upload budget PDFs (BP2, PBS)</label>
-        <input type="file" id="budgetUpload" accept="application/pdf,.pdf" multiple />
-        <button type="button" class="btn" id="clearBudgetBtn">Clear budget docs</button>
-        <span class="upload-status" id="budgetStatus">No budget documents loaded yet. Upload BP2 and relevant PBS files to enable evaluation.</span>
+        <div class="stepper-title" id="step2Title">Upload budget papers</div>
+        <div class="stepper-body" id="step2Body">One or more PDFs — BP2 plus any relevant Portfolio Budget Statements.</div>
+        <div class="stepper-action" id="step2Action">
+          <label class="btn primary" for="budgetUpload">Upload budget PDFs</label>
+          <input type="file" id="budgetUpload" accept="application/pdf,.pdf" multiple />
+          <button type="button" class="stepper-link" id="clearBudgetBtn" style="display:none">Clear budget docs</button>
+        </div>
+        <span class="upload-status" id="budgetStatus" style="display:none"></span>
       </div>
 
-      <div class="step" id="step3">
-        <div class="step-label">
-          <span class="step-num">3</span>
-          <span class="step-title">Evaluate</span>
+      <div class="stepper-node is-locked" id="step3Node">
+        <div class="stepper-head">
+          <span class="stepper-num"><span>3</span></span>
+          <span>Evaluate</span>
         </div>
-        <button type="button" class="btn primary" id="evaluateBtn" disabled>Evaluate all asks against budget</button>
-        <button type="button" class="btn" id="stopEvalBtn" style="display:none">Stop</button>
-        <span class="upload-status" id="evalStatus">Upload a submission and budget docs to enable evaluation.</span>
-      </div>
-
-      <div class="step step-column" id="step4">
-        <div class="step-label">
-          <span class="step-num">4</span>
-          <span class="step-title">Insights beyond the asks</span>
+        <div class="stepper-title" id="step3Title">Run alignment analysis</div>
+        <div class="stepper-body" id="step3Body">Checks each ask against the budget and, if a focus brief is provided, surfaces extra insights.</div>
+        <div class="stepper-action" id="step3Action">
+          <button type="button" class="btn primary" id="evaluateBtn" disabled>Evaluate asks</button>
+          <button type="button" class="btn" id="stopEvalBtn" style="display:none">Stop</button>
+          <button type="button" class="stepper-link" id="focusToggle">Add focus brief (optional)</button>
         </div>
-        <textarea id="focusBrief" class="focus-brief" placeholder="Optional: a short paragraph or bullet list of your organisation's strategic priorities, focus populations, and policy areas (e.g. 'JSS focuses on men's behaviour change, Aboriginal justice, youth justice, homelessness, economic participation, and climate justice.'). The tool uses this to surface unasked measures and risks relevant to you."></textarea>
-        <div style="display:flex;flex-wrap:wrap;gap:.6rem;align-items:center;margin-top:.6rem">
-          <label class="btn" for="planUpload">Upload strategic plan (optional)</label>
-          <input type="file" id="planUpload" accept="application/pdf,.pdf" style="display:none" />
-          <button type="button" class="btn" id="clearPlanBtn" style="display:none">Clear plan</button>
-          <button type="button" class="btn primary" id="insightsBtn" disabled>Generate insights</button>
-          <button type="button" class="btn" id="stopInsightsBtn" style="display:none">Stop</button>
-          <span class="upload-status" id="insightsStatus" style="flex:1">Upload budget docs and optionally add focus context to enable insights.</span>
+        <!-- Focus-brief drawer inside Step 3: collapsed by default, expands on toggle. -->
+        <div id="focusDrawer" style="display:none;margin-top:.65rem;padding-top:.65rem;border-top:1px dashed var(--border)">
+          <textarea id="focusBrief" class="focus-brief" placeholder="Optional: a short paragraph or bullet list of your organisation's strategic priorities, focus populations, and policy areas (e.g. 'JSS focuses on men's behaviour change, Aboriginal justice, youth justice, homelessness, economic participation, and climate justice.'). The tool uses this to surface unasked measures and risks relevant to you."></textarea>
+          <div style="display:flex;flex-wrap:wrap;gap:.5rem;align-items:center;margin-top:.5rem">
+            <label class="btn" for="planUpload">Upload strategic plan (optional)</label>
+            <input type="file" id="planUpload" accept="application/pdf,.pdf" style="display:none" />
+            <button type="button" class="stepper-link" id="clearPlanBtn" style="display:none">Clear plan</button>
+          </div>
         </div>
+        <!-- Hidden but preserved for the existing code paths. -->
+        <span class="upload-status" id="evalStatus" style="display:none"></span>
+        <span class="upload-status" id="insightsStatus" style="display:none"></span>
+        <button type="button" id="insightsBtn" style="display:none" disabled></button>
+        <button type="button" id="stopInsightsBtn" style="display:none"></button>
       </div>
     </div>
+
+    <!-- Verdict-count tiles: click to filter register. Shown once asks exist. -->
+    <div class="verdict-tiles" id="verdictTiles"></div>
 
     <div class="toolbar" id="registerToolbar" style="display:none">
       <input id="searchBox" class="search-input" type="search" placeholder="Search asks, categories, or evidence…" />
@@ -401,8 +473,13 @@ function render() {
   const toolbar = document.getElementById('registerToolbar');
   const tableWrap = document.getElementById('registerTableWrap');
 
+  // Keep stepper + verdict tiles in sync on every render pass so any state
+  // change (row add, evaluation, filter toggle) is reflected immediately.
+  if (typeof updateStepper === 'function') updateStepper();
+  if (typeof renderVerdictTiles === 'function') renderVerdictTiles();
+
   // Empty-state: no submission uploaded yet. Hide the register entirely so
-  // the landing view is just the four-step stack.
+  // the landing view is just the three-step stepper.
   if (!rows.length) {
     toolbar.style.display = 'none';
     tableWrap.style.display = 'none';
@@ -1032,10 +1109,9 @@ document.getElementById('pdfUpload').addEventListener('change', async (e) => {
     updateEvaluateButtonState();
     if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
     if (failures.length) {
-      const partial = ` ⚠️ ${failures.length} chunk${failures.length === 1 ? '' : 's'} failed during extraction — some recommendations may be missing. Try re-uploading the document if the ask count looks low.`;
-      setUploadStatus(`Extracted ${newRows.length} asks from "${file.name}".${partial} Now upload budget documents (BP2, PBS) in Step 2 and click "Evaluate all asks" in Step 3.`, 'error');
+      setUploadStatus(`Extracted ${newRows.length} asks · ${failures.length} chunk${failures.length === 1 ? '' : 's'} failed — some asks may be missing.`, 'error');
     } else {
-      setUploadStatus(`Extracted ${newRows.length} asks from "${file.name}". Now upload budget documents (BP2, PBS) in Step 2 and click "Evaluate all asks" in Step 3.`, 'ok');
+      setUploadStatus(`Extracted ${newRows.length} asks from "${file.name}".`, 'ok');
     }
   } catch (err) {
     console.error(err);
@@ -1067,9 +1143,8 @@ function updateEvaluateButtonState() {
   const hasRows = rows.length > 0;
   const hasBudget = budgetDocs.length > 0;
   btn.disabled = !(hasRows && hasBudget);
-  if (!hasRows) setEvalStatus('Upload or keep the sample submission to enable evaluation.', '');
-  else if (!hasBudget) setEvalStatus('Upload at least one budget document (BP2 or PBS) to enable evaluation.', '');
-  else setEvalStatus(`Ready to evaluate ${rows.length} asks against ${budgetDocs.length} budget document${budgetDocs.length === 1 ? '' : 's'}.`, 'ok');
+  setEvalStatus('', '');
+  if (typeof updateStepper === 'function') updateStepper();
 }
 
 document.getElementById('budgetUpload').addEventListener('change', async (e) => {
@@ -1086,8 +1161,7 @@ document.getElementById('budgetUpload').addEventListener('change', async (e) => 
       const doc = { name: file.name, pages, totalChars };
       if (idx >= 0) budgetDocs[idx] = doc; else budgetDocs.push(doc);
     }
-    const summary = budgetDocs.map(d => `${d.name} (${d.pages.length}p, ${d.totalChars.toLocaleString()} chars)`).join('; ');
-    setBudgetStatus(`Loaded ${budgetDocs.length} budget doc${budgetDocs.length === 1 ? '' : 's'}: ${summary}`, 'ok');
+    setBudgetStatus(`Loaded ${budgetDocs.length} doc${budgetDocs.length === 1 ? '' : 's'}.`, 'ok');
     updateEvaluateButtonState();
     if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
   } catch (err) {
@@ -1100,7 +1174,7 @@ document.getElementById('budgetUpload').addEventListener('change', async (e) => 
 
 document.getElementById('clearBudgetBtn').addEventListener('click', () => {
   budgetDocs.length = 0;
-  setBudgetStatus('No budget documents loaded yet. Upload BP2 and relevant PBS files to enable evaluation.', '');
+  setBudgetStatus('', '');
   updateEvaluateButtonState();
   if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
 });
@@ -1534,10 +1608,32 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
     setEvalStatus(`Evaluation complete in ${totalElapsed}s · all ${rows.length} asks evaluated.${coverageNote}`, 'ok');
   }
   evalAbortController = null;
+
+  // Merged flow: if a focus brief or strategic plan is present, automatically
+  // kick off the insights pass so the user doesn't need a second click. The
+  // insights button remains hidden in the UI; its click handler does the work.
+  if (!signal.aborted) {
+    const brief = (document.getElementById('focusBrief').value || '').trim();
+    const hasContext = brief || strategicPlan;
+    if (hasContext && budgetDocs.length) {
+      const ibtn = document.getElementById('insightsBtn');
+      if (ibtn && !ibtn.disabled) ibtn.click();
+    }
+  }
 });
 
 document.getElementById('stopEvalBtn').addEventListener('click', () => {
   if (evalAbortController) evalAbortController.abort();
+});
+
+// Focus-brief drawer toggle inside Step 3. Flip label and aria-expanded when
+// opened so users know they can tuck it back away.
+document.getElementById('focusToggle').addEventListener('click', () => {
+  const drawer = document.getElementById('focusDrawer');
+  const btn = document.getElementById('focusToggle');
+  const open = drawer.style.display === '';
+  drawer.style.display = open ? 'none' : '';
+  btn.textContent = open ? 'Add focus brief (optional)' : 'Hide focus brief';
 });
 
 // ============================================================================
@@ -1573,21 +1669,109 @@ function updateInsightsButtonState() {
   updateStepStates();
 }
 
-function updateStepStates() {
-  // Determine active step: first step that still needs user action.
+// Stepper state driver. Sets is-done / is-current / is-locked on each node
+// and updates titles/bodies so the current step always reflects what's
+// happening. Called every time rows, budgetDocs, or verdicts change.
+//
+// State rules:
+//   Step 1: done once rows.length > 0; current until then.
+//   Step 2: locked until rows.length > 0; current until budgetDocs.length > 0;
+//           done once budgetDocs.length > 0.
+//   Step 3: locked until both above are done; current once ready; stays current
+//           (not "done") after evaluation so the user can re-run if they want.
+function updateStepper() {
   const hasSubmission = rows.length > 0;
   const hasBudget = typeof budgetDocs !== 'undefined' && budgetDocs.length > 0;
-  const evalBtn = document.getElementById('evaluateBtn');
-  const evalReady = evalBtn && !evalBtn.disabled;
   const anyEvaluated = rows.some(r => r.verdict && r.verdict !== 'Not yet evaluated');
-  let active;
-  if (!hasSubmission) active = 1;
-  else if (!hasBudget) active = 2;
-  else if (evalReady && !anyEvaluated) active = 3;
-  else active = 4;
-  ['step1','step2','step3','step4'].forEach((id, i) => {
-    const el = document.getElementById(id);
-    if (el) el.classList.toggle('is-active', (i + 1) === active);
+
+  const nodes = {
+    1: document.getElementById('step1Node'),
+    2: document.getElementById('step2Node'),
+    3: document.getElementById('step3Node'),
+  };
+  function setState(n, state) {
+    const el = nodes[n]; if (!el) return;
+    el.classList.remove('is-done','is-current','is-locked');
+    el.classList.add(state);
+  }
+
+  // Step 1 — Submission
+  if (hasSubmission) {
+    setState(1, 'is-done');
+    const t = document.getElementById('step1Title');
+    const b = document.getElementById('step1Body');
+    if (t && !t.dataset.preset) t.textContent = `Submission loaded · ${rows.length} ask${rows.length===1?'':'s'}`;
+    if (b && !b.dataset.preset) b.textContent = 'Upload a different PDF below to replace.';
+  } else {
+    setState(1, 'is-current');
+  }
+
+  // Step 2 — Budget docs
+  if (!hasSubmission) {
+    setState(2, 'is-locked');
+  } else if (hasBudget) {
+    setState(2, 'is-done');
+    const t = document.getElementById('step2Title');
+    const b = document.getElementById('step2Body');
+    if (t) t.textContent = `Budget loaded · ${budgetDocs.length} doc${budgetDocs.length===1?'':'s'}`;
+    if (b) b.textContent = budgetDocs.map(d => d.name).join(', ');
+    const clr = document.getElementById('clearBudgetBtn');
+    if (clr) clr.style.display = '';
+  } else {
+    setState(2, 'is-current');
+    const t = document.getElementById('step2Title');
+    const b = document.getElementById('step2Body');
+    if (t) t.textContent = 'Upload budget papers';
+    if (b) b.textContent = 'One or more PDFs — BP2 plus any relevant Portfolio Budget Statements.';
+    const clr = document.getElementById('clearBudgetBtn');
+    if (clr) clr.style.display = 'none';
+  }
+
+  // Step 3 — Evaluate
+  if (!hasSubmission || !hasBudget) {
+    setState(3, 'is-locked');
+  } else {
+    setState(3, 'is-current');
+    const t = document.getElementById('step3Title');
+    const b = document.getElementById('step3Body');
+    const evalBtn = document.getElementById('evaluateBtn');
+    if (evalBtn) evalBtn.textContent = anyEvaluated ? `Re-evaluate ${rows.length} asks` : `Evaluate ${rows.length} asks`;
+    if (t) t.textContent = anyEvaluated ? 'Evaluation complete' : 'Run alignment analysis';
+    if (b) b.textContent = anyEvaluated
+      ? 'Results below. You can re-run with changes to the focus brief or budget docs.'
+      : 'Checks each ask against the budget. Add a focus brief for extra insights.';
+  }
+}
+// Keep the old name alive for any lingering callers.
+function updateStepStates() { updateStepper(); }
+
+// Render the five verdict-count tiles above the register. Clicking a tile
+// toggles the verdict filter (click again to clear). Tiles are hidden until
+// at least one ask has been evaluated.
+const VERDICTS = ['Directly reflected','Partially reflected','Adjacent','Not reflected','Unclear'];
+function renderVerdictTiles() {
+  const host = document.getElementById('verdictTiles');
+  if (!host) return;
+  const anyEvaluated = rows.some(r => r.verdict && r.verdict !== 'Not yet evaluated');
+  if (!anyEvaluated) { host.classList.remove('is-visible'); host.innerHTML = ''; return; }
+  const counts = Object.fromEntries(VERDICTS.map(v => [v, 0]));
+  rows.forEach(r => { if (counts[r.verdict] !== undefined) counts[r.verdict]++; });
+  const active = state.filters.verdict;
+  host.innerHTML = VERDICTS.map(v => `
+    <button type="button" class="verdict-tile${active === v ? ' is-active' : ''}" data-verdict="${escapeHtml(v)}">
+      <span class="verdict-tile-count">${counts[v]}</span>
+      <span class="verdict-tile-label">${escapeHtml(v)}</span>
+      <span class="verdict-tile-accent"></span>
+    </button>
+  `).join('');
+  host.classList.add('is-visible');
+  host.querySelectorAll('.verdict-tile').forEach(tile => {
+    tile.addEventListener('click', () => {
+      const v = tile.getAttribute('data-verdict');
+      state.filters.verdict = (state.filters.verdict === v) ? 'All' : v;
+      renderVerdictTiles();
+      render();
+    });
   });
 }
 
@@ -1888,33 +2072,46 @@ render();
 // ============================================================================
 const WORKER_BASE = GEMINI_ENDPOINT.replace(/\/+$/, '');
 
+// Preset hydration folds into the Step 1 tile: a small tag in the header
+// (Rehearsal / Budget night) plus a customised title + body naming the org
+// and submission. Setting dataset.preset locks the title/body so
+// updateStepper() won't overwrite with generic "Submission loaded" text.
 function showPresetBanner({ label, linkType, orgName, submissionName, banner, error }) {
-  const el = document.getElementById('presetBanner');
-  if (!el) return;
-  el.className = 'preset-banner' + (linkType === 'rehearsal' ? ' rehearsal'
-    : linkType === 'live' ? ' live' : '');
+  const node = document.getElementById('step1Node');
+  const tag = document.getElementById('step1Tag');
+  const titleEl = document.getElementById('step1Title');
+  const bodyEl = document.getElementById('step1Body');
+  if (!node || !tag || !titleEl || !bodyEl) return;
+
+  node.classList.remove('rehearsal','live');
+  if (linkType === 'rehearsal') node.classList.add('rehearsal');
+  else if (linkType === 'live') node.classList.add('live');
+
   if (error) {
-    el.innerHTML = `<span class="preset-banner-tag">Link</span>`
-      + `<div class="preset-banner-body"><p class="preset-banner-title preset-banner-error">`
-      + escapeHtml(error) + `</p><p class="preset-banner-meta">`
-      + `Continue and upload your submission and budget PDFs manually, or check the link with your ACOSS contact.</p></div>`;
-    el.style.display = 'flex';
+    tag.textContent = 'Link issue';
+    tag.style.display = '';
+    titleEl.textContent = error;
+    bodyEl.textContent = 'Upload the submission PDF manually below, or check the link with your ACOSS contact.';
+    titleEl.dataset.preset = '1';
+    bodyEl.dataset.preset = '1';
     return;
   }
-  const tag = linkType === 'rehearsal' ? 'Rehearsal'
-           : linkType === 'live' ? 'Budget night' : 'Preloaded';
-  const title = escapeHtml(label || orgName || 'Preloaded asks');
+
+  const tagText = linkType === 'rehearsal' ? 'Rehearsal'
+                : linkType === 'live' ? 'Budget night' : 'Preloaded';
+  tag.textContent = tagText;
+  tag.style.display = '';
+
+  const title = label || orgName || 'Preloaded submission';
   const metaParts = [];
-  if (orgName && label && orgName !== label) metaParts.push(escapeHtml(orgName));
-  if (submissionName) metaParts.push('Submission: ' + escapeHtml(submissionName));
-  if (banner && banner.trim()) metaParts.unshift(escapeHtml(banner.trim()));
-  const meta = metaParts.join(' · ');
-  el.innerHTML = `<span class="preset-banner-tag">${escapeHtml(tag)}</span>`
-    + `<div class="preset-banner-body">`
-    + `<p class="preset-banner-title">${title}</p>`
-    + (meta ? `<p class="preset-banner-meta">${meta}</p>` : '')
-    + `</div>`;
-  el.style.display = 'flex';
+  if (orgName && label && orgName !== label) metaParts.push(orgName);
+  if (submissionName) metaParts.push(submissionName);
+  if (banner && banner.trim()) metaParts.unshift(banner.trim());
+
+  titleEl.textContent = title;
+  bodyEl.textContent = metaParts.join(' · ') || 'Asks are preloaded. Replace by uploading a different PDF below.';
+  titleEl.dataset.preset = '1';
+  bodyEl.dataset.preset = '1';
 }
 
 function rowsFromPreset(preset) {
@@ -1946,13 +2143,13 @@ async function hydrateFromPreset() {
     });
     if (res.status === 404) {
       showPresetBanner({ error: 'This preloaded link was not found.' });
-      setUploadStatus('No submission loaded. Upload a pre-budget submission PDF to begin.', '');
+      setUploadStatus('', '');
       return;
     }
     if (!res.ok) {
       const detail = await res.text().catch(() => '');
       showPresetBanner({ error: `Could not load preloaded asks (HTTP ${res.status}).` });
-      setUploadStatus('No submission loaded. Upload a pre-budget submission PDF to begin.', '');
+      setUploadStatus('', '');
       console.warn('Preset load failed', res.status, detail);
       return;
     }
@@ -1964,7 +2161,7 @@ async function hydrateFromPreset() {
         submissionName: preset.submissionName, banner: preset.banner,
         error: 'This preloaded link has no asks saved.'
       });
-      setUploadStatus('No submission loaded. Upload a pre-budget submission PDF to begin.', '');
+      setUploadStatus('', '');
     } else {
       rows = preRows;
       recomputePageGroups();
@@ -1980,12 +2177,7 @@ async function hydrateFromPreset() {
         label: preset.label, linkType: preset.linkType, orgName: preset.orgName,
         submissionName: preset.submissionName, banner: preset.banner
       });
-      const submissionLabel = preset.submissionName ? `"${preset.submissionName}"` : 'the preloaded submission';
-      setUploadStatus(
-        `Loaded ${preRows.length} preloaded ask${preRows.length === 1 ? '' : 's'} from ${submissionLabel}. `
-        + `Now upload your budget PDFs (BP2, PBS) in Step 2, then click "Evaluate all asks" in Step 3.`,
-        'ok'
-      );
+      setUploadStatus('', '');
     }
     // Fire-and-forget open-analytics ping. Never block the UI on this.
     try {
@@ -1998,7 +2190,7 @@ async function hydrateFromPreset() {
   } catch (err) {
     console.error('Preset hydration failed', err);
     showPresetBanner({ error: 'Could not load preloaded asks (network error).' });
-    setUploadStatus('No submission loaded. Upload a pre-budget submission PDF to begin.', '');
+    setUploadStatus('', '');
   }
 }
 
