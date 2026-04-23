@@ -436,6 +436,11 @@ function openModal(id) {
     `<div class="detail-box">
       <span class="pill ${verdictClass(row.verdict)}" style="margin-bottom:.5rem;display:inline-block">${escapeHtml(row.verdict)}</span>
       <p>${escapeHtml(row.rule)}</p>
+      ${row.coverage && row.coverage.byDoc ? `
+        <p style="margin:.4rem 0 .6rem;font-size:var(--text-xs);color:var(--text-muted)">
+          <strong>Pages reviewed for this ask:</strong> ${escapeHtml(row.coverage.byDoc)}
+          <span style="display:block;margin-top:.2rem">(${row.coverage.pagesUsed} of ${row.coverage.totalPages} total budget pages — selected as most relevant to the ask's keywords, plus each doc's first 3 pages for context.)</span>
+        </p>` : ''}
       ${(row.evidenceItems || []).map(e => `
         <article class="evidence-card">
           <div style="font-weight:600;font-size:var(--text-sm)">${escapeHtml(e.identifier)}</div>
@@ -1030,6 +1035,215 @@ function buildBudgetCorpus(opts) {
   return truncated.join('\n\n========================================\n\n');
 }
 
+// ---------------------------------------------------------------------------
+// Relevance-filtered corpus (per-ask). Instead of sending the same truncated
+// 150k every evaluation, we score each budget page against the ask's keywords
+// and send the most relevant pages that fit. This way every page of the
+// budget is reachable for *some* ask — nothing is permanently invisible.
+// ---------------------------------------------------------------------------
+
+const STOPWORDS = new Set(('a an the and or but if then of to for from in on at by with without within into onto upon as is are was were be been being do does did have has had will would should could may might must can shall this that these those it its they them their there here what which who whom whose how why when where while not no nor so too very also just than more most less least other another some any all each every few many much only own same new old such both either neither between among across after before during over under above below upon us our we you your i my me he she his her him them also including include included includes').split(' '));
+
+function tokenise(s) {
+  return String(s || '').toLowerCase().match(/[a-z][a-z0-9\-]{2,}/g) || [];
+}
+
+function buildBudgetPageIndex() {
+  // Flat list across all docs, with per-doc name preserved.
+  const pages = [];
+  for (const d of budgetDocs) {
+    for (const p of d.pages) {
+      const tokens = tokenise(p.text).filter(t => !STOPWORDS.has(t));
+      const termSet = new Set(tokens);
+      pages.push({
+        docName: d.name,
+        pageNum: p.page,
+        text: p.text,
+        termSet,
+        length: `=== ${d.name} · PAGE ${p.page} ===\n${p.text}`.length,
+      });
+    }
+  }
+  // Document frequency per term (how many pages contain it) — used for IDF weighting.
+  const df = new Map();
+  for (const p of pages) {
+    for (const term of p.termSet) df.set(term, (df.get(term) || 0) + 1);
+  }
+  return { pages, df, totalPages: pages.length };
+}
+
+function scorePagesForAsk(index, askText, overarchingText) {
+  const queryTerms = [...new Set(
+    [...tokenise(askText), ...tokenise(overarchingText)].filter(t => !STOPWORDS.has(t))
+  )];
+  if (!queryTerms.length) return index.pages.map((p, i) => ({ page: p, score: 0, idx: i }));
+  const scored = index.pages.map((p, i) => {
+    let score = 0;
+    for (const term of queryTerms) {
+      if (p.termSet.has(term)) {
+        const docFreq = index.df.get(term) || 1;
+        // IDF: rare terms weighted heavily. +1 smoothing.
+        score += Math.log((index.totalPages + 1) / (docFreq + 1)) + 1;
+      }
+    }
+    return { page: p, score, idx: i };
+  });
+  return scored;
+}
+
+// Build a corpus tailored to one ask. Always includes the first few pages of
+// each doc (overview/contents/summary) for context, then packs the highest-
+// scoring remaining pages until we hit maxChars. Pages are emitted in their
+// original order so the model sees coherent document flow.
+function buildRelevanceCorpus(index, askText, overarchingText, maxChars) {
+  const cap = maxChars || BUDGET_CORPUS_MAX_CHARS;
+  const OVERVIEW_PAGES_PER_DOC = 3; // first 3 pages of each doc are auto-included
+  const selected = new Set();
+  let charsUsed = 0;
+
+  // 1. Auto-include overview pages.
+  const perDocSeen = new Map();
+  index.pages.forEach((p, i) => {
+    const count = perDocSeen.get(p.docName) || 0;
+    if (count < OVERVIEW_PAGES_PER_DOC) {
+      if (charsUsed + p.length + 4 <= cap) {
+        selected.add(i);
+        charsUsed += p.length + 4;
+        perDocSeen.set(p.docName, count + 1);
+      }
+    }
+  });
+
+  // 2. Pack highest-scoring remaining pages until cap.
+  const scored = scorePagesForAsk(index, askText, overarchingText);
+  const remaining = scored
+    .filter(s => !selected.has(s.idx) && s.score > 0)
+    .sort((a, b) => b.score - a.score);
+  for (const s of remaining) {
+    if (charsUsed + s.page.length + 4 > cap) continue;
+    selected.add(s.idx);
+    charsUsed += s.page.length + 4;
+  }
+
+  // 3. Emit selected pages in original order.
+  const orderedIdxs = [...selected].sort((a, b) => a - b);
+  const selectedPages = orderedIdxs.map(i => index.pages[i]);
+
+  // Build corpus text with gap markers so the model knows pages aren't contiguous.
+  let corpus = '';
+  let prev = null;
+  for (const p of selectedPages) {
+    if (prev && (p.docName !== prev.docName || p.pageNum !== prev.pageNum + 1)) {
+      corpus += `\n\n[… non-relevant pages omitted for this ask …]\n\n`;
+    }
+    corpus += (corpus ? '\n\n' : '') + `=== ${p.docName} · PAGE ${p.pageNum} ===\n${p.text}`;
+    prev = p;
+  }
+
+  // Coverage summary: pages per doc as compact ranges for status display.
+  const coverage = summariseCoverage(selectedPages, index.totalPages);
+  return { corpus, pagesUsed: selectedPages.length, coverage };
+}
+
+// Add coverage's pages to the running set of unique pages seen; return the set's size.
+// Receives either a coverage object with byDoc string (display) — but we store the
+// structured list directly on the row so we can rebuild unique keys here.
+function unionPageCount(seenSet, coverage) {
+  if (!coverage || !Array.isArray(coverage.pageKeys)) return seenSet.size;
+  for (const k of coverage.pageKeys) seenSet.add(k);
+  return seenSet.size;
+}
+
+function summariseCoverage(selectedPages, totalPages) {
+  // Group by docName, compress consecutive page numbers into ranges.
+  const byDoc = new Map();
+  for (const p of selectedPages) {
+    if (!byDoc.has(p.docName)) byDoc.set(p.docName, []);
+    byDoc.get(p.docName).push(p.pageNum);
+  }
+  const parts = [];
+  for (const [name, nums] of byDoc) {
+    nums.sort((a, b) => a - b);
+    const ranges = [];
+    let start = nums[0], end = nums[0];
+    for (let i = 1; i < nums.length; i++) {
+      if (nums[i] === end + 1) end = nums[i];
+      else { ranges.push(start === end ? `${start}` : `${start}–${end}`); start = end = nums[i]; }
+    }
+    ranges.push(start === end ? `${start}` : `${start}–${end}`);
+    parts.push(`${name} pp. ${ranges.join(', ')}`);
+  }
+  const pageKeys = selectedPages.map(p => `${p.docName}::${p.pageNum}`);
+  return { byDoc: parts.join(' · '), pagesUsed: selectedPages.length, totalPages, pageKeys };
+}
+
+// Plan a set of contiguous page-range sweeps that each fit under maxCorpusChars.
+// Returns [{ label, corpus, pageRanges }]. Pages are emitted in original order
+// (doc1 pp.1–K, doc1 pp.K+1–2K, doc2 pp.1–K, …) so every page is covered
+// by exactly one sweep. A small overlap at sweep boundaries lets measures that
+// straddle a sweep boundary be caught by both.
+function planInsightsSweeps(maxCorpusChars) {
+  const SWEEP_OVERLAP_PAGES = 2;
+  const sweeps = [];
+  for (const d of budgetDocs) {
+    let startIdx = 0;
+    while (startIdx < d.pages.length) {
+      // Grow the window page-by-page while it still fits.
+      let endIdx = startIdx;
+      let chars = 0;
+      while (endIdx < d.pages.length) {
+        const p = d.pages[endIdx];
+        const pageChars = `=== ${d.name} · PAGE ${p.page} ===\n${p.text}\n\n`.length;
+        if (endIdx > startIdx && chars + pageChars > maxCorpusChars) break;
+        chars += pageChars;
+        endIdx++;
+      }
+      const sliceEnd = Math.max(endIdx, startIdx + 1); // always include at least one page
+      const pagesSlice = d.pages.slice(startIdx, sliceEnd);
+      const corpus = pagesSlice
+        .map(p => `=== ${d.name} · PAGE ${p.page} ===\n${p.text}`)
+        .join('\n\n');
+      const firstPage = pagesSlice[0].page;
+      const lastPage = pagesSlice[pagesSlice.length - 1].page;
+      sweeps.push({
+        label: `${d.name} pp. ${firstPage}–${lastPage}`,
+        corpus,
+        pageRanges: [{ docName: d.name, firstPage, lastPage }],
+      });
+      if (sliceEnd >= d.pages.length) break;
+      const nextStart = sliceEnd - SWEEP_OVERLAP_PAGES;
+      // Guard against no-progress (would happen only if one page > maxCorpusChars,
+      // which shouldn't happen for PDF text but we're defensive).
+      startIdx = nextStart > startIdx ? nextStart : sliceEnd;
+    }
+  }
+  return sweeps;
+}
+
+// Merge duplicate priority/risk items across sweeps. Items are considered
+// duplicates if they share a normalised title OR identical (source, pdfPage)
+// pair. Keeps the item with the longer/more complete summary.
+function dedupeInsightItems(items) {
+  const byKey = new Map();
+  for (const item of (items || [])) {
+    if (!item || typeof item !== 'object') continue;
+    const titleKey = String(item.title || '').toLowerCase().replace(/\s+/g, ' ').trim();
+    const pageKey = `${String(item.source || '').toLowerCase()}::${String(item.pdfPage || '').trim()}`;
+    const key = titleKey || pageKey;
+    if (!key) continue;
+    const existing = byKey.get(key);
+    if (!existing) {
+      byKey.set(key, item);
+    } else {
+      // Prefer the item with the longer summary + whyItMatters (usually richer).
+      const lenA = (existing.summary || '').length + (existing.whyItMatters || '').length;
+      const lenB = (item.summary || '').length + (item.whyItMatters || '').length;
+      if (lenB > lenA) byKey.set(key, item);
+    }
+  }
+  return [...byKey.values()];
+}
+
 // Pre-flight: if the whole prompt is still enormous after corpus capping,
 // chop it down smartly so we never hit the Worker's 90s ceiling.
 function enforcePromptCeiling(prompt, label) {
@@ -1080,9 +1294,20 @@ Rules:
 - Return ONLY the JSON object. No prose, no code fences.`;
 }
 
-async function evaluateOneAsk(row, corpus, signal, retryStatusFn) {
+async function evaluateOneAsk(row, indexOrCorpus, signal, retryStatusFn) {
+  // indexOrCorpus can be either a relevance index (new path) or a plain corpus
+  // string (legacy fallback for when we only have one small doc).
+  let corpus, coverage = null;
+  if (indexOrCorpus && indexOrCorpus.pages) {
+    const built = buildRelevanceCorpus(indexOrCorpus, row.ask, row.overarching, BUDGET_CORPUS_MAX_CHARS);
+    corpus = built.corpus;
+    coverage = built.coverage;
+  } else {
+    corpus = String(indexOrCorpus || '');
+  }
   const prompt = enforcePromptCeiling(buildEvaluationPrompt(row.ask, row.overarching, corpus), 'Evaluation prompt');
-  return geminiFetchWithRetry({ prompt, temperature: 0.1, signal }, retryStatusFn);
+  const result = await geminiFetchWithRetry({ prompt, temperature: 0.1, signal }, retryStatusFn);
+  return { result, coverage };
 }
 
 function applyEvaluationToRow(row, result) {
@@ -1110,12 +1335,23 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   evalAbortController = new AbortController();
   const signal = evalAbortController.signal;
   const totalRaw = budgetDocs.reduce((n, d) => n + d.totalChars, 0);
-  const corpus = buildBudgetCorpus();
-  const totalChars = corpus.length;
-  const truncatedNote = totalRaw > totalChars
-    ? ` (trimmed from ${totalRaw.toLocaleString()} for speed — head + tail preserved)`
-    : '';
-  setEvalStatus(`Starting evaluation of ${rows.length} asks against ${totalChars.toLocaleString()} chars of budget text${truncatedNote}…`, 'working');
+  const totalPagesAll = budgetDocs.reduce((n, d) => n + d.pages.length, 0);
+  // Decide per-ask relevance routing vs. single-corpus routing.
+  // If total budget text fits under the per-call cap, a single shared corpus
+  // is simplest and fastest. If it doesn't, we build a keyword index once and
+  // tailor the corpus to each ask so every budget page is reachable for
+  // *some* evaluation.
+  const useRelevance = totalRaw > BUDGET_CORPUS_MAX_CHARS;
+  let sharedCorpus = null;
+  let pageIndex = null;
+  if (useRelevance) {
+    setEvalStatus(`Indexing ${totalPagesAll} budget pages for per-ask relevance scoring…`, 'working');
+    pageIndex = buildBudgetPageIndex();
+    setEvalStatus(`Ready: ${rows.length} asks will each be evaluated against their most relevant pages from ${totalPagesAll} total budget pages (${totalRaw.toLocaleString()} chars). Every page is reachable for some ask.`, 'working');
+  } else {
+    sharedCorpus = buildBudgetCorpus();
+    setEvalStatus(`Starting evaluation of ${rows.length} asks against ${sharedCorpus.length.toLocaleString()} chars of budget text…`, 'working');
+  }
 
   // Only evaluate rows that haven't been successfully evaluated yet — so re-clicking
   // Evaluate picks up any that failed or were skipped previously.
@@ -1135,17 +1371,24 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   let succeeded = 0, failed = 0, processed = 0;
   const failures = []; // [{ ask, reason }]
   const startedAt = Date.now();
+  // Track unique pages that have been sent to Gemini across all asks in this run,
+  // so we can tell the user "X of Y budget pages were reviewed across all asks".
+  const coveragesSeen = new Set();
+  let pagesReached = 0;
   for (const row of pendingRows) {
     if (signal.aborted) break; // only true if user clicked Stop
     processed++;
     try {
       const elapsed = Math.round((Date.now() - startedAt) / 1000);
       setEvalStatus(`Evaluating ${processed}/${pendingRows.length}: "${row.ask.slice(0, 80)}…" · ${elapsed}s elapsed`, 'working');
-      const result = await evaluateOneAsk(row, corpus, signal, (msg) => {
+      const input = useRelevance ? pageIndex : sharedCorpus;
+      const { result, coverage } = await evaluateOneAsk(row, input, signal, (msg) => {
         setEvalStatus(`Evaluating ${processed}/${pendingRows.length} — ${msg}`, 'working');
       });
       applyEvaluationToRow(row, result);
+      if (coverage) row.coverage = coverage;
       succeeded++;
+      pagesReached = Math.max(pagesReached, unionPageCount(coveragesSeen, coverage));
       render();
     } catch (err) {
       // Only honour user-initiated abort — server timeouts / dropped fetches also throw AbortError
@@ -1161,14 +1404,17 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   const totalElapsed = Math.round((Date.now() - startedAt) / 1000);
   const skipped = pendingRows.length - processed;
   const totalEvaluated = rows.filter(r => r.verdict !== 'Not yet evaluated').length;
+  const coverageNote = useRelevance
+    ? ` · ${coveragesSeen.size} of ${totalPagesAll} budget pages reviewed across all asks (each ask saw its most relevant pages).`
+    : '';
   if (signal.aborted) {
-    setEvalStatus(`Stopped after ${processed} of ${pendingRows.length} in this run (${totalElapsed}s) · ${succeeded} succeeded, ${failed} failed, ${skipped} not started. ${rows.length - totalEvaluated} still unevaluated — click Evaluate to resume.`, 'error');
+    setEvalStatus(`Stopped after ${processed} of ${pendingRows.length} in this run (${totalElapsed}s) · ${succeeded} succeeded, ${failed} failed, ${skipped} not started. ${rows.length - totalEvaluated} still unevaluated — click Evaluate to resume.${coverageNote}`, 'error');
   } else if (failed) {
     const reasons = failures.map(f => `• "${f.ask}…" — ${f.reason}`).join('\n');
     console.warn('Evaluation failures:\n' + reasons);
-    setEvalStatus(`Done in ${totalElapsed}s · ${succeeded}/${pendingRows.length} succeeded, ${failed} failed (see console). ${totalEvaluated}/${rows.length} asks now evaluated — click Evaluate again to retry the failures.`, 'error');
+    setEvalStatus(`Done in ${totalElapsed}s · ${succeeded}/${pendingRows.length} succeeded, ${failed} failed (see console). ${totalEvaluated}/${rows.length} asks now evaluated — click Evaluate again to retry the failures.${coverageNote}`, 'error');
   } else {
-    setEvalStatus(`Evaluation complete in ${totalElapsed}s · all ${rows.length} asks evaluated.`, 'ok');
+    setEvalStatus(`Evaluation complete in ${totalElapsed}s · all ${rows.length} asks evaluated.${coverageNote}`, 'ok');
   }
   evalAbortController = null;
 });
@@ -1391,30 +1637,62 @@ document.getElementById('insightsBtn').addEventListener('click', async () => {
     return;
   }
   const totalRawInsights = budgetDocs.reduce((n, d) => n + d.totalChars, 0);
-  const corpus = buildBudgetCorpus();
-  const prompt = enforcePromptCeiling(buildInsightsPrompt(focusContext, corpus), 'Insights prompt');
-
-  const truncatedNote = totalRawInsights > corpus.length
-    ? ` (trimmed from ${totalRawInsights.toLocaleString()} for speed — head + tail preserved)`
-    : '';
-  setInsightsStatus(`Generating insights against ${corpus.length.toLocaleString()} chars of budget text${truncatedNote}… (typically 45-90s)`, 'working');
   const startedAt = Date.now();
 
   try {
-    const parsed = await geminiFetchWithRetry(
-      {
-        prompt,
-        temperature: 0.3,
-        signal,
-        onTick: (s) => setInsightsStatus(`Generating insights… ${s}s elapsed`, 'working'),
-      },
-      (msg) => setInsightsStatus(`Insights: ${msg}`, 'working')
-    );
+    let parsed;
+    if (totalRawInsights <= BUDGET_CORPUS_MAX_CHARS) {
+      // Fits in one call — fast path.
+      const corpus = buildBudgetCorpus();
+      const prompt = enforcePromptCeiling(buildInsightsPrompt(focusContext, corpus), 'Insights prompt');
+      setInsightsStatus(`Generating insights against ${corpus.length.toLocaleString()} chars of budget text… (typically 45-90s)`, 'working');
+      parsed = await geminiFetchWithRetry(
+        {
+          prompt,
+          temperature: 0.3,
+          signal,
+          onTick: (s) => setInsightsStatus(`Generating insights… ${s}s elapsed`, 'working'),
+        },
+        (msg) => setInsightsStatus(`Insights: ${msg}`, 'working')
+      );
+    } else {
+      // Multi-sweep path: split the budget into contiguous sweeps that each fit
+      // under the per-call cap, run insights on each, merge + dedupe so no
+      // measure is silently dropped just because it lives in the middle of a
+      // long doc.
+      const sweeps = planInsightsSweeps(BUDGET_CORPUS_MAX_CHARS);
+      setInsightsStatus(`Budget is ${totalRawInsights.toLocaleString()} chars across ${budgetDocs.reduce((n,d)=>n+d.pages.length,0)} pages — too large for one pass. Running ${sweeps.length} sweeps to cover the full document…`, 'working');
+      const merged = { unaskedPriorities: [], risks: [] };
+      for (let i = 0; i < sweeps.length; i++) {
+        if (signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+        const sweep = sweeps[i];
+        setInsightsStatus(`Sweep ${i + 1}/${sweeps.length}: scanning ${sweep.label} (${sweep.corpus.length.toLocaleString()} chars)…`, 'working');
+        const prompt = enforcePromptCeiling(buildInsightsPrompt(focusContext, sweep.corpus), `Insights prompt (sweep ${i + 1})`);
+        const part = await geminiFetchWithRetry(
+          {
+            prompt,
+            temperature: 0.3,
+            signal,
+            onTick: (s) => setInsightsStatus(`Sweep ${i + 1}/${sweeps.length} (${sweep.label})… ${s}s elapsed`, 'working'),
+          },
+          (msg) => setInsightsStatus(`Sweep ${i + 1}/${sweeps.length}: ${msg}`, 'working')
+        );
+        if (Array.isArray(part?.unaskedPriorities)) merged.unaskedPriorities.push(...part.unaskedPriorities);
+        if (Array.isArray(part?.risks)) merged.risks.push(...part.risks);
+      }
+      parsed = {
+        unaskedPriorities: dedupeInsightItems(merged.unaskedPriorities),
+        risks: dedupeInsightItems(merged.risks),
+      };
+    }
     renderInsights(parsed);
     const totalElapsed = Math.round((Date.now() - startedAt) / 1000);
     const pCount = parsed?.unaskedPriorities?.length || 0;
     const rCount = parsed?.risks?.length || 0;
-    setInsightsStatus(`Insights generated in ${totalElapsed}s · ${pCount} unasked priorities, ${rCount} risks.`, 'ok');
+    const coverageNote = totalRawInsights > BUDGET_CORPUS_MAX_CHARS
+      ? ` · full budget covered across multiple sweeps (no pages dropped).`
+      : '';
+    setInsightsStatus(`Insights generated in ${totalElapsed}s · ${pCount} unasked priorities, ${rCount} risks.${coverageNote}`, 'ok');
   } catch (err) {
     if (err.name !== 'AbortError') {
       console.error(err);
