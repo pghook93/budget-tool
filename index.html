@@ -2717,7 +2717,14 @@ function renderInsights(data) {
     const noQuoteNotice = !showQuote
       ? `<div class="insight-quote" style="font-style:normal;color:var(--text-muted);font-size:var(--text-xs)">No verbatim excerpt available — refer to the budget document and page above for full wording.</div>`
       : '';
-    const titleText = escapeHtml(item.title || 'Untitled measure') + (item.amount ? ' — ' + escapeHtml(item.amount) : '');
+    // Derive the display amount from the QUOTE, not the AI-provided amount
+    // field, to eliminate heading-vs-sentence figure mismatches. Pattern
+    // matches "$151.0 million over four years", "$2.3 billion", etc.
+    const amountFromQuote = item.quote
+      ? (item.quote.match(/\$[\d,.]+\s*(?:million|billion|trillion|m|bn)?(?:\s+over\s+[\w\s-]+?years?)?/i) || [null])[0]
+      : null;
+    const displayAmount = amountFromQuote || item.amount || '';
+    const titleText = escapeHtml(item.title || 'Untitled measure') + (displayAmount ? ' — ' + escapeHtml(displayAmount) : '');
     return `
       <details class="insight-card ${kind === 'risk' ? 'risk' : ''}">
         <summary>
@@ -2785,7 +2792,8 @@ document.getElementById('insightsBtn').addEventListener('click', async () => {
     for (let i = 0; i < sweeps.length; i++) {
       if (signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
       const sweep = sweeps[i];
-      setInsightsStatus(`${labelPrefix}${i + 1}/${sweeps.length}: scanning ${sweep.label} (${sweep.corpus.length.toLocaleString()} chars)…`, 'working');
+      // Keep the status generic — users don't need sweep counts or page ranges.
+      setInsightsStatus('Generating insights…', 'working');
       const prompt = enforcePromptCeiling(buildInsightsPrompt(focusContext, sweep.corpus), `Insights prompt (sweep ${i + 1})`);
       try {
         const part = await geminiFetchWithRetry(
@@ -2793,9 +2801,9 @@ document.getElementById('insightsBtn').addEventListener('click', async () => {
             prompt,
             temperature: 0.3,
             signal,
-            onTick: (s) => setInsightsStatus(`${labelPrefix}${i + 1}/${sweeps.length} (${sweep.label})… ${s}s elapsed`, 'working'),
+            onTick: () => setInsightsStatus('Generating insights…', 'working'),
           },
-          (msg) => setInsightsStatus(`${labelPrefix}${i + 1}/${sweeps.length}: ${msg}`, 'working')
+          () => setInsightsStatus('Generating insights…', 'working')
         );
         if (Array.isArray(part?.unaskedPriorities)) merged.unaskedPriorities.push(...part.unaskedPriorities);
         if (Array.isArray(part?.risks)) merged.risks.push(...part.risks);
