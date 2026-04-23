@@ -6,7 +6,9 @@
 <title>ACOSS Ask Register — Budget Alignment</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&display=swap" rel="stylesheet">
+<!-- Geist is a contemporary neo-grotesque in the Neue Haas Grotesk lineage (Vercel, open source).
+     Used site-wide so the hero sits naturally with body text. -->
+<link href="https://fonts.googleapis.com/css2?family=Geist:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <style>
   :root{
     /* Deep-space palette inspired by Perplexity's Space Race page.
@@ -49,9 +51,9 @@
   }
   *{box-sizing:border-box}
   html,body{margin:0;padding:0;color:var(--text);
-    font-family:'Inter','Helvetica Neue',Arial,sans-serif;
-    font-size:15.5px;line-height:1.55;font-weight:400;
-    font-feature-settings:'cv11','ss01','ss03';
+    font-family:'Geist','Neue Haas Grotesk Text Pro','Helvetica Neue',Arial,sans-serif;
+    font-size:16px;line-height:1.55;font-weight:400;
+    font-feature-settings:'ss01','ss03','tnum';
     -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
     /* Deep-space backdrop: near-black base + two low-opacity nebula washes
        (indigo + teal) fixed to the viewport. */
@@ -74,16 +76,13 @@
   h1{font-size:var(--text-2xl);margin:0 0 .35rem;font-weight:700;letter-spacing:-.02em;line-height:1.15}
   .hero-eyebrow{display:inline-flex;align-items:center;gap:.55rem;
     font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.22em;
-    color:var(--accent);font-weight:600;margin:0 0 .9rem;
-    font-family:'Inter',sans-serif}
+    color:var(--accent);font-weight:500;margin:0 0 .9rem;
+    font-family:inherit}
   .hero-eyebrow::before{content:"";width:22px;height:1px;background:var(--accent);opacity:.7}
-  .hero-title{font-size:var(--text-hero);font-weight:500;letter-spacing:-.018em;
-    line-height:1.08;margin:0 0 1rem;padding:.05em 0 .1em;
-    color:#ffffff;
-    font-family:'Fraunces','Georgia',serif;
-    font-variation-settings:"opsz" 96;
-    text-shadow:0 0 28px hsla(0,0%,100%,0.18),
-                0 0 60px hsla(172,65%,58%,0.10)}
+  /* Hero: Neue Haas–style neo-grotesque, large but thin. No serif, no bloom. */
+  .hero-title{font-family:inherit;font-size:clamp(2.6rem, 5.6vw, 4rem);
+    font-weight:300;letter-spacing:-.022em;line-height:1.02;
+    margin:0 0 1rem;padding:0;color:#ffffff}
   .lede{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 1.5rem;max-width:70ch;line-height:1.6}
   .card{background:var(--surface);border:1px solid var(--border);
     border-radius:var(--radius-xl);box-shadow:var(--shadow-sm);
@@ -121,7 +120,8 @@
   .cell-overarching{font-size:var(--text-sm);color:var(--text-muted);line-height:1.45;
     font-style:normal}
   td.cell-page,th.col-page{white-space:nowrap;font-variant-numeric:tabular-nums;
-    color:var(--text-muted);font-size:var(--text-xs)}
+    color:var(--text-muted);font-size:var(--text-xs);text-align:right}
+  th.col-page select{text-align:left}
 
   /* Pill */
   .pill{display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .625rem;
@@ -294,22 +294,76 @@
   #step1Node.is-done.rehearsal #step1Action,
   #step1Node.is-done.live #step1Action{display:none}
 
-  /* CURRENT — frosted-white glow marker, no yellow */
+  /* CURRENT — brightly lit, frosted-white ring so the eye lands on it. */
   .stepper-node.is-current{background:var(--primary-tint);
-    box-shadow:inset 0 0 0 1px hsla(0,0%,100%,0.28)}
+    box-shadow:inset 0 0 0 1px hsla(0,0%,100%,0.42),
+               0 0 22px hsla(0,0%,100%,0.10);
+    opacity:1}
   .stepper-node.is-current .stepper-head span:not(.stepper-num):not(.stepper-tag){color:var(--text-strong)}
   .stepper-node.is-current .stepper-num{background:hsla(0,0%,100%,0.95);border-color:hsla(0,0%,100%,0.95);
     color:#1a1f2b;font-weight:700;
     box-shadow:0 0 0 4px hsla(0,0%,100%,0.12), 0 0 14px hsla(0,0%,100%,0.35)}
 
-  /* LOCKED — dim, no action, clearly inactive */
-  .stepper-node.is-locked{background:var(--surface);opacity:.6}
+  /* LOCKED — dulled; action controls inside are disabled so users can only
+     progress once the previous step is complete. */
+  .stepper-node.is-locked{background:var(--surface);opacity:.42;filter:saturate(.7)}
+  .stepper-node.is-locked .stepper-action > *{pointer-events:none;opacity:.7}
   .stepper-node.is-locked .stepper-title,
   .stepper-node.is-locked .stepper-body{color:var(--text-muted)}
   .stepper-node.is-locked .stepper-num{background:transparent;border-style:dashed;
     border-color:var(--border);color:var(--text-faint)}
-  .stepper-node.is-locked .stepper-action,
-  .stepper-node.is-locked #focusDrawer{display:none}
+  /* Skipped: user opted past the optional step — treat it like locked-but-muted. */
+  .stepper-node.is-skipped{background:var(--surface);opacity:.5}
+  .stepper-node.is-skipped .stepper-title,
+  .stepper-node.is-skipped .stepper-body{color:var(--text-muted)}
+  .stepper-node.is-skipped .stepper-num{background:transparent;border-color:var(--border)}
+  .stepper-node.is-skipped .stepper-num::after{content:"—";color:var(--text-muted);font-weight:700}
+  .stepper-node.is-skipped .stepper-num > span{display:none}
+
+  /* Focus-brief modal: centred overlay, dismissable via backdrop/Esc/Cancel. */
+  .modal-backdrop{position:fixed;inset:0;z-index:80;display:none;
+    align-items:center;justify-content:center;padding:1.5rem;
+    background:hsla(222,45%,4%,0.62);backdrop-filter:blur(6px) saturate(140%);
+    -webkit-backdrop-filter:blur(6px) saturate(140%)}
+  .modal-backdrop.is-open{display:flex}
+  .modal{background:var(--surface-2);border:1px solid var(--border);
+    border-radius:var(--radius-xl);box-shadow:0 24px 80px hsla(0,0%,0%,.55);
+    max-width:640px;width:100%;padding:1.6rem 1.6rem 1.4rem;
+    backdrop-filter:blur(16px) saturate(140%);
+    -webkit-backdrop-filter:blur(16px) saturate(140%)}
+  .modal h2{font-size:var(--text-xl);margin:0 0 .35rem;font-weight:500;
+    letter-spacing:-.012em;color:var(--text-strong)}
+  .modal p.lede{margin:0 0 1rem;font-size:var(--text-sm)}
+  .modal textarea{width:100%;min-height:170px;resize:vertical;
+    background:var(--surface);border:1px solid var(--border);
+    border-radius:var(--radius-md);padding:.8rem .9rem;color:var(--text);
+    font-family:inherit;font-size:var(--text-sm);line-height:1.55;outline:none}
+  .modal textarea:focus{border-color:var(--primary)}
+  .modal-actions{display:flex;justify-content:flex-end;gap:.6rem;margin-top:1rem}
+
+  /* Sign-up CTA: teal-tinted glass card, appears after first analysis run. */
+  .signup-cta{display:flex;gap:1.25rem;align-items:center;justify-content:space-between;
+    padding:1.1rem 1.35rem;margin:0 0 var(--space-5);
+    border-radius:var(--radius-xl);
+    background:linear-gradient(135deg, hsla(172,65%,58%,0.14), hsla(220,35%,24%,0.5));
+    border:1px solid hsla(172,65%,58%,0.32);
+    box-shadow:0 0 40px hsla(172,65%,58%,0.14), inset 0 0 0 1px hsla(0,0%,100%,0.04);
+    backdrop-filter:blur(10px) saturate(140%);
+    -webkit-backdrop-filter:blur(10px) saturate(140%)}
+  .signup-cta[hidden]{display:none}
+  .signup-cta-eyebrow{font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.18em;
+    color:var(--accent);font-weight:500;margin-bottom:.2rem}
+  .signup-cta-title{font-size:var(--text-lg);font-weight:500;letter-spacing:-.01em;
+    color:var(--text-strong);line-height:1.2}
+  .signup-cta-body{margin:.3rem 0 0;color:var(--text-muted);font-size:var(--text-sm);
+    line-height:1.5;max-width:62ch}
+  .signup-cta-btn{white-space:nowrap;flex-shrink:0;
+    background:var(--accent);color:#04181a;border-color:var(--accent);font-weight:500}
+  .signup-cta-btn:hover{background:var(--accent-strong);border-color:var(--accent-strong)}
+  @media (max-width:680px){
+    .signup-cta{flex-direction:column;align-items:flex-start;gap:.9rem}
+    .signup-cta-btn{width:100%;justify-content:center}
+  }
 
   .stepper-tag{display:inline-flex;align-items:center;padding:.15rem .5rem;
     border-radius:999px;font-size:var(--text-2xs);font-weight:700;
@@ -403,14 +457,11 @@
         <div class="stepper-title" id="step2Title">Add your strategic focus</div>
         <div class="stepper-body" id="step2Body">A short brief on your priorities, or a strategic-plan PDF. Used to surface insights and risks relevant to your organisation.</div>
         <div class="stepper-action" id="step2Action">
-          <button type="button" class="btn" id="focusToggle">Add focus brief</button>
+          <button type="button" class="btn primary" id="focusToggle">Add focus brief</button>
           <label class="btn" for="planUpload">Upload strategic plan</label>
           <input type="file" id="planUpload" accept="application/pdf,.pdf" style="display:none" />
           <button type="button" class="stepper-link" id="clearPlanBtn" style="display:none">Clear plan</button>
-        </div>
-        <!-- Focus-brief drawer: collapsed by default, expands on toggle. -->
-        <div id="focusDrawer" style="display:none;margin-top:.65rem;padding-top:.65rem;border-top:1px dashed var(--border)">
-          <textarea id="focusBrief" class="focus-brief" placeholder="A short paragraph or bullet list of your organisation's strategic priorities, focus populations, and policy areas (e.g. 'JSS focuses on men's behaviour change, Aboriginal justice, youth justice, homelessness, economic participation, and climate justice.'). Used to surface unasked measures and risks relevant to you."></textarea>
+          <button type="button" class="stepper-link" id="skipFocusBtn">Skip — go to budget upload</button>
         </div>
       </div>
 
@@ -448,6 +499,18 @@
       </div>
     </div>
 
+    <!-- Sign-up CTA: only visible after at least one ask has been evaluated.
+         This tool is a tester so orgs can trial last year's budget; the CTA
+         invites them to sign up for this year's live analysis. -->
+    <div class="signup-cta" id="signupCta" hidden>
+      <div class="signup-cta-text">
+        <div class="signup-cta-eyebrow">You're on the tester version</div>
+        <div class="signup-cta-title">Want this year's budget analysed live on the night?</div>
+        <p class="signup-cta-body">Sign up to get a Budget Night link that pre-loads your submission and runs alignment analysis the moment the Papers drop.</p>
+      </div>
+      <a class="btn primary signup-cta-btn" id="signupCtaBtn" href="#">Sign up for Budget Night →</a>
+    </div>
+
     <!-- Verdict-count tiles: click to filter register. Shown once asks exist. -->
     <div class="verdict-tiles" id="verdictTiles"></div>
 
@@ -471,7 +534,7 @@
             <th class="col-overarching">Overarching category
               <select data-col="overarching"><option value="All">All</option></select>
             </th>
-            <th class="col-ask">Ask (verbatim)
+            <th class="col-ask"><span id="askColLabel">Ask</span>
               <select data-col="ask"><option value="All">All</option></select>
             </th>
             <th class="col-status-short">Verdict
@@ -620,7 +683,7 @@ function render() {
         <td class="cell-overarching">${escapeHtml(r.overarching)}</td>
         <td class="cell-ask">${escapeHtml(r.ask)}</td>
         <td class="col-status-short"><span class="pill ${verdictClass(r.verdict)}">${escapeHtml(r.verdict)}</span></td>
-        <td class="cell-page">p. ${escapeHtml(r.askPage)}</td>
+        <td class="cell-page">${escapeHtml(r.askPage)}</td>
       </tr>
     `).join('');
     body.querySelectorAll('tr[data-id]').forEach(tr => {
@@ -1220,6 +1283,11 @@ document.getElementById('pdfUpload').addEventListener('change', async (e) => {
       return;
     }
     rows = newRows;
+    // If the uploaded file name carries a YYYY-YY year (e.g.
+    // "2025-26-pre-budget-submission.pdf"), use it for year-aware copy and
+    // the Ask column header.
+    const yr = extractSubmissionYear(file.name);
+    if (yr) { currentSubmissionYear = yr; refreshAskColumnLabel(); if (typeof refreshStep2Copy === 'function') refreshStep2Copy(); }
     recomputePageGroups();
     state.filters = { overarching:'All', ask:'All', verdict:'All', pageGroup:'All' };
     state.search = '';
@@ -1746,18 +1814,42 @@ document.getElementById('stopEvalBtn').addEventListener('click', () => {
   if (evalAbortController) evalAbortController.abort();
 });
 
-// Focus-brief drawer toggle inside Step 2 (Strategic focus). Flip label when
-// opened so users know they can tuck it back away.
-document.getElementById('focusToggle').addEventListener('click', () => {
-  const drawer = document.getElementById('focusDrawer');
-  const btn = document.getElementById('focusToggle');
-  const open = drawer.style.display === '';
-  drawer.style.display = open ? 'none' : '';
-  btn.textContent = open ? 'Add focus brief' : 'Hide focus brief';
-  if (!open) {
-    const ta = document.getElementById('focusBrief');
-    if (ta) ta.focus();
+// Focus-brief modal: opens the popup, preserves draft on cancel (Esc/backdrop
+// click cancels; Save closes and commits via the existing updateStepper path).
+let focusSkipped = false;
+const focusModal = document.getElementById('focusModal');
+const focusBriefEl = document.getElementById('focusBrief');
+let _focusDraftBeforeOpen = '';
+
+function openFocusModal() {
+  _focusDraftBeforeOpen = focusBriefEl.value;
+  focusModal.classList.add('is-open');
+  setTimeout(() => focusBriefEl.focus(), 30);
+}
+function closeFocusModal(save) {
+  if (!save) { focusBriefEl.value = _focusDraftBeforeOpen; }
+  focusModal.classList.remove('is-open');
+  if (save) {
+    focusSkipped = false; // committing a brief overrides any prior skip
+    updateInsightsButtonState();
+    if (typeof updateStepper === 'function') updateStepper();
   }
+}
+document.getElementById('focusToggle').addEventListener('click', openFocusModal);
+document.getElementById('focusModalCancel').addEventListener('click', () => closeFocusModal(false));
+document.getElementById('focusModalSave').addEventListener('click', () => closeFocusModal(true));
+focusModal.addEventListener('click', (e) => { if (e.target === focusModal) closeFocusModal(false); });
+document.addEventListener('keydown', (e) => {
+  if (e.key === 'Escape' && focusModal.classList.contains('is-open')) closeFocusModal(false);
+});
+
+// Skip button: user moves past the optional step without adding context.
+document.getElementById('skipFocusBtn').addEventListener('click', () => {
+  focusSkipped = true;
+  if (typeof updateStepper === 'function') updateStepper();
+  // Nudge the page down to the budget-papers step.
+  const s3 = document.getElementById('step3Node');
+  if (s3 && s3.scrollIntoView) s3.scrollIntoView({ behavior: 'smooth', block: 'center' });
 });
 
 // ============================================================================
@@ -1838,7 +1930,9 @@ function updateStepper() {
     setState(1, 'is-current');
   }
 
-  // Step 2 — Strategic focus (optional)
+  // Step 2 — Strategic focus (optional). User must either add a brief/plan
+  // or explicitly Skip before Step 3 becomes actionable.
+  const step2Complete = hasFocus || (typeof focusSkipped !== 'undefined' && focusSkipped);
   if (!hasSubmission) {
     setState(2, 'is-locked');
   } else if (hasFocus) {
@@ -1856,12 +1950,18 @@ function updateStepper() {
         b.textContent = t2.length > 140 ? t2.slice(0,137)+'…' : t2;
       }
     }
+  } else if (typeof focusSkipped !== 'undefined' && focusSkipped) {
+    setState(2, 'is-skipped');
+    const t = document.getElementById('step2Title');
+    const b = document.getElementById('step2Body');
+    if (t) t.textContent = 'Skipped';
+    if (b) b.textContent = 'Running without a strategic focus. You can still add one later.';
   } else {
     setState(2, 'is-current');
   }
 
-  // Step 3 — Budget papers
-  if (!hasSubmission) {
+  // Step 3 — Budget papers. Locked until step 2 is complete or skipped.
+  if (!hasSubmission || !step2Complete) {
     setState(3, 'is-locked');
   } else if (hasBudget) {
     setState(3, 'is-done');
@@ -1906,6 +2006,9 @@ function renderVerdictTiles() {
   const host = document.getElementById('verdictTiles');
   if (!host) return;
   const anyEvaluated = rows.some(r => r.verdict && r.verdict !== 'Not yet evaluated');
+  // Toggle the sign-up CTA in lock-step with the tiles' visibility.
+  const cta = document.getElementById('signupCta');
+  if (cta) cta.hidden = !anyEvaluated;
   if (!anyEvaluated) { host.classList.remove('is-visible'); host.innerHTML = ''; return; }
   const counts = Object.fromEntries(VERDICTS.map(v => [v, 0]));
   rows.forEach(r => { if (counts[r.verdict] !== undefined) counts[r.verdict]++; });
@@ -2253,6 +2356,17 @@ function refreshStep2Copy() {
   b.textContent = yr
     ? `Upload ${yr} Budget Paper 2 and any Portfolio Budget Statements relevant to your work.`
     : 'Upload Budget Paper 2 and any Portfolio Budget Statements relevant to your work.';
+  refreshAskColumnLabel();
+}
+
+// Update the Ask column header: "As per your 2025-26 submission" when the
+// year is known, otherwise just "Ask".
+function refreshAskColumnLabel() {
+  const el = document.getElementById('askColLabel');
+  if (!el) return;
+  el.textContent = currentSubmissionYear
+    ? `As per your ${currentSubmissionYear} submission`
+    : 'Ask';
 }
 
 // Preset hydration folds into the Step 1 tile: a small tag in the header
@@ -2291,6 +2405,7 @@ function showPresetBanner({ label, linkType, orgName, submissionName, banner, er
             || extractSubmissionYear(label)
             || extractSubmissionYear(banner);
   currentSubmissionYear = year;
+  refreshAskColumnLabel();
 
   titleEl.textContent = orgName || label || 'Preloaded submission';
   bodyEl.textContent = year
@@ -2492,5 +2607,18 @@ hydrateFromPreset();
   else { requestAnimationFrame(loop); }
 })();
 </script>
+
+<!-- Focus-brief modal. Textarea is the same #focusBrief element other code queries. -->
+<div class="modal-backdrop" id="focusModal" role="dialog" aria-modal="true" aria-labelledby="focusModalTitle">
+  <div class="modal" role="document">
+    <h2 id="focusModalTitle">Add your focus brief</h2>
+    <p class="lede">A short paragraph or bullet list of your organisation's strategic priorities, focus populations and policy areas. Used to surface unasked measures and risks relevant to you.</p>
+    <textarea id="focusBrief" placeholder="e.g. JSS focuses on men's behaviour change, Aboriginal justice, youth justice, homelessness, economic participation, and climate justice."></textarea>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="focusModalCancel">Cancel</button>
+      <button type="button" class="btn primary" id="focusModalSave">Save focus brief</button>
+    </div>
+  </div>
+</div>
 </body>
 </html>
