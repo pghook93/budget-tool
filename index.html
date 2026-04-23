@@ -225,14 +225,6 @@
     background:var(--surface-3);overflow:hidden;border:1px solid var(--border-soft)}
   .eval-progress-fill{height:100%;border-radius:999px;background:var(--accent);
     transition:width .3s ease;box-shadow:0 0 12px hsla(172,65%,58%,0.35)}
-  .eval-progress-track[data-mode="indeterminate"] .eval-progress-fill{
-    width:40% !important;
-    background:linear-gradient(90deg, transparent, var(--accent) 50%, transparent);
-    animation:evalShimmer 1.4s linear infinite}
-  @keyframes evalShimmer{
-    0%{transform:translateX(-100%)}
-    100%{transform:translateX(250%)}
-  }
 
   @media (max-width:760px){
     .shell{padding:1rem}
@@ -478,11 +470,26 @@
   .verdict-tile{display:flex;flex-direction:column;align-items:flex-start;
     padding:.7rem .85rem;background:var(--surface);border:1px solid var(--border);
     border-radius:var(--radius-md);cursor:pointer;transition:all .15s ease;
-    text-align:left;font:inherit}
+    text-align:left;font:inherit;position:relative}
+  /* Hover definition: appears below the tile on hover / focus. Pointer-events
+     off on the tooltip itself so it never blocks clicks on neighbouring tiles. */
+  .verdict-tile-tooltip{position:absolute;top:calc(100% + .4rem);left:0;right:0;
+    background:hsla(222,35%,12%,0.97);border:1px solid hsla(0,0%,100%,0.12);
+    color:var(--text);font-size:var(--text-xs);line-height:1.4;
+    padding:.55rem .7rem;border-radius:var(--radius-sm);
+    box-shadow:0 10px 30px hsla(0,0%,0%,0.45);
+    opacity:0;visibility:hidden;transform:translateY(-2px);
+    transition:opacity .15s ease,transform .15s ease,visibility 0s linear .15s;
+    pointer-events:none;z-index:40;white-space:normal;text-align:left;
+    font-weight:400;letter-spacing:0}
+  .verdict-tile:hover .verdict-tile-tooltip,
+  .verdict-tile:focus-visible .verdict-tile-tooltip{
+    opacity:1;visibility:visible;transform:translateY(0);
+    transition:opacity .15s ease,transform .15s ease,visibility 0s linear 0s}
   .verdict-tile:hover{border-color:var(--primary);box-shadow:var(--shadow-sm)}
   .verdict-tile.is-active{background:var(--primary-tint);border-color:var(--primary)}
   .verdict-tile-count{font-size:1.5rem;font-weight:700;line-height:1;
-    font-variant-numeric:tabular-nums}
+    font-variant-numeric:tabular-nums;color:#fff}
   .verdict-tile-label{font-size:var(--text-xs);color:var(--text-muted);
     margin-top:.2rem;letter-spacing:.02em}
   /* Progress-bar style accent: full-width track along the bottom of each tile,
@@ -557,8 +564,8 @@
   /* Live countdown to Federal Budget — anchored top-right, understated so it
      doesn't fight the hero title. Numbers use tabular figures so the layout
      doesn't jitter as values tick. */
-  .budget-countdown{position:fixed;top:clamp(1.25rem,3vh,2rem);
-    right:clamp(1.25rem,3vw,2rem);display:flex;flex-direction:column;
+  .budget-countdown{position:fixed;top:clamp(2rem,4.5vh,3rem);
+    right:clamp(2.25rem,4.5vw,3.25rem);display:flex;flex-direction:column;
     align-items:flex-end;gap:.3rem;z-index:60;
     padding:.7rem .95rem;border-radius:var(--radius-md);
     background:hsla(222,35%,10%,0.55);border:1px solid hsla(0,0%,100%,0.10);
@@ -626,7 +633,7 @@
      Lives at the top level so it stays visible on both the welcome screen
      and the main tool screen. Fixed-position, top-right. -->
 <div class="budget-countdown" id="budgetCountdown" aria-live="polite">
-  <span class="budget-countdown-label" id="budgetCountdownLabel">Federal Budget in</span>
+  <span class="budget-countdown-label" id="budgetCountdownLabel">Budget dropping in…</span>
   <div class="budget-countdown-timer" id="budgetCountdownTimer">
     <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="days">—</span><span class="budget-countdown-sub">days</span></div>
     <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="hours">—</span><span class="budget-countdown-sub">hrs</span></div>
@@ -1609,11 +1616,29 @@ function setEvalStatus(msg, kind) {
   el.textContent = msg;
 }
 
-// Visual progress bar for Evaluate. Three modes:
-//   showEvalProgress('indeterminate', label)  — shimmer, used while preparing
-//   showEvalProgress('determinate', label, done, total)  — filling bar
-//   hideEvalProgress()  — hides the bar (after completion or on reset)
-function showEvalProgress(mode, label, done, total) {
+// Progress bar uses a "creep" model so the user never sees a dead bar:
+//   * showEvalProgress('start')  — shows bar, starts a gentle creep from ~3%
+//     so there's visible motion from second one.
+//   * showEvalProgress('update', done, total)  — jumps the bar to the real
+//     percentage for 'done of total' completed asks, then resumes creeping
+//     toward the *next* ask's slot while it processes.
+//   * hideEvalProgress()  — stops the creep and hides the bar.
+// We deliberately never expose the raw "N of M" count — a filling bar plus
+// "Working on it…" feels calmer than a live counter on a slow API.
+let _evalCreepTimer = null;
+let _evalCreepTarget = 0.08; // where we're creeping toward (fraction 0–1)
+let _evalCreepCurrent = 0;
+function _evalCreepTick() {
+  const fill = document.getElementById('evalProgressFill');
+  if (!fill) return;
+  // Ease toward the target; never quite reach it so we always have room to move.
+  const gap = _evalCreepTarget - _evalCreepCurrent;
+  if (gap > 0.002) {
+    _evalCreepCurrent += gap * 0.06; // slow ease-in
+    fill.style.width = (_evalCreepCurrent * 100).toFixed(2) + '%';
+  }
+}
+function showEvalProgress(mode, doneOrLabel, total) {
   const root = document.getElementById('evalProgress');
   const track = document.getElementById('evalProgressTrack');
   const fill = document.getElementById('evalProgressFill');
@@ -1621,20 +1646,29 @@ function showEvalProgress(mode, label, done, total) {
   const cnt = document.getElementById('evalProgressCount');
   if (!root) return;
   root.hidden = false;
-  if (label) lab.textContent = label;
-  if (mode === 'indeterminate') {
-    track.setAttribute('data-mode', 'indeterminate');
-    cnt.textContent = '';
-  } else {
-    track.setAttribute('data-mode', 'determinate');
+  track.setAttribute('data-mode', 'determinate');
+  if (cnt) cnt.textContent = '';
+  if (lab) lab.textContent = 'Working on it…';
+  if (mode === 'start') {
+    // Begin at ~3% so there's immediate visible fill, then creep toward ~8%
+    // while the first ask is in flight.
+    _evalCreepCurrent = 0.03;
+    _evalCreepTarget = 0.08;
+    fill.style.width = '3%';
+  } else if (mode === 'update') {
     const t = Math.max(1, total|0);
-    const d = Math.max(0, Math.min(t, done|0));
-    fill.style.width = Math.round((d / t) * 100) + '%';
-    cnt.textContent = `${d} of ${t}`;
+    const d = Math.max(0, Math.min(t, doneOrLabel|0));
+    // Hard-jump to the completed fraction…
+    _evalCreepCurrent = d / t;
+    // …then set the next slot as the creep target (but never 100% until we hide).
+    _evalCreepTarget = Math.min(0.97, (d + 0.85) / t);
+    fill.style.width = (_evalCreepCurrent * 100).toFixed(2) + '%';
   }
+  if (!_evalCreepTimer) _evalCreepTimer = setInterval(_evalCreepTick, 180);
 }
 function hideEvalProgress() {
   const root = document.getElementById('evalProgress');
+  if (_evalCreepTimer) { clearInterval(_evalCreepTimer); _evalCreepTimer = null; }
   if (root) root.hidden = true;
 }
 
@@ -2041,7 +2075,7 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   const stopBtn = document.getElementById('stopEvalBtn');
   btn.disabled = true;
   stopBtn.style.display = '';
-  showEvalProgress('indeterminate', 'Preparing evaluation…');
+  showEvalProgress('start');
   evalAbortController = new AbortController();
   const signal = evalAbortController.signal;
   const totalRaw = budgetDocs.reduce((n, d) => n + d.totalChars, 0);
@@ -2056,13 +2090,12 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   let pageIndex = null;
   if (useRelevance) {
     setEvalStatus(`Indexing ${totalPagesAll} budget pages for per-ask relevance scoring…`, 'working');
-    showEvalProgress('indeterminate', `Indexing ${totalPagesAll} budget pages…`);
     pageIndex = buildBudgetPageIndex();
     setEvalStatus(`Ready: ${rows.length} asks will each be evaluated against their most relevant pages from ${totalPagesAll} total budget pages (${totalRaw.toLocaleString()} chars). Every page is reachable for some ask.`, 'working');
   } else {
     sharedCorpus = buildBudgetCorpus();
     setEvalStatus(`Starting evaluation of ${rows.length} asks against ${sharedCorpus.length.toLocaleString()} chars of budget text…`, 'working');
-    showEvalProgress('indeterminate', 'Preparing budget text…');
+
   }
 
   // Only evaluate rows that haven't been successfully evaluated yet — so re-clicking
@@ -2094,8 +2127,8 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
     try {
       const elapsed = Math.round((Date.now() - startedAt) / 1000);
       setEvalStatus(`Evaluating ${processed}/${pendingRows.length}: "${row.ask.slice(0, 80)}…" · ${elapsed}s elapsed`, 'working');
-      // Determinate progress: count asks completed so far (processed-1 is in flight).
-      showEvalProgress('determinate', `Evaluating ask ${processed} of ${pendingRows.length}…`, processed - 1, pendingRows.length);
+      // Bar creeps while this ask is in flight; will jump when it completes below.
+      showEvalProgress('update', processed - 1, pendingRows.length);
       const input = useRelevance ? pageIndex : sharedCorpus;
       const { result, coverage } = await evaluateOneAsk(row, input, signal, (msg) => {
         setEvalStatus(`Evaluating ${processed}/${pendingRows.length} — ${msg}`, 'working');
@@ -2104,7 +2137,7 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
       if (coverage) row.coverage = coverage;
       succeeded++;
       pagesReached = Math.max(pagesReached, unionPageCount(coveragesSeen, coverage));
-      showEvalProgress('determinate', `Evaluated ${processed} of ${pendingRows.length}`, processed, pendingRows.length);
+      showEvalProgress('update', processed, pendingRows.length);
       render();
     } catch (err) {
       // Only honour user-initiated abort — server timeouts / dropped fetches also throw AbortError
@@ -2342,6 +2375,16 @@ function updateStepStates() { updateStepper(); }
 // toggles the verdict filter (click again to clear). Tiles are hidden until
 // at least one ask has been evaluated.
 const VERDICTS = ['Directly reflected','Partially reflected','Adjacent','Not reflected','Unclear'];
+// Plain-English definitions used in the tooltip that appears when you hover a
+// verdict bubble. Kept deliberately short — one line each — so the tooltip
+// stays compact.
+const VERDICT_DEFS = {
+  'Directly reflected': 'The budget includes a measure that matches this ask — same mechanism, same population, same intent.',
+  'Partially reflected': 'The budget includes a measure that addresses part of this ask, but falls short on scope, funding or cohort.',
+  'Adjacent': 'The budget has a related measure in the same policy area, but it targets a different problem or mechanism.',
+  'Not reflected': 'Nothing in the budget matches this ask. Check the “Next best thing” on the ask card for the closest alternative.',
+  'Unclear': 'There isn’t enough information in the budget papers to decide — the ask may need manual review.'
+};
 function renderVerdictTiles() {
   const host = document.getElementById('verdictTiles');
   if (!host) return;
@@ -2358,10 +2401,11 @@ function renderVerdictTiles() {
   host.innerHTML = VERDICTS.map(v => {
     const pct = Math.round((counts[v] / maxCount) * 100);
     return `
-    <button type="button" class="verdict-tile${active === v ? ' is-active' : ''}" data-verdict="${escapeHtml(v)}">
+    <button type="button" class="verdict-tile${active === v ? ' is-active' : ''}" data-verdict="${escapeHtml(v)}" aria-describedby="verdictTip-${VERDICTS.indexOf(v)}">
       <span class="verdict-tile-count">${counts[v]}</span>
       <span class="verdict-tile-label">${escapeHtml(v)}</span>
       <span class="verdict-tile-accent" style="--fill:${pct}%" aria-hidden="true"></span>
+      <span class="verdict-tile-tooltip" role="tooltip" id="verdictTip-${VERDICTS.indexOf(v)}">${escapeHtml(VERDICT_DEFS[v] || '')}</span>
     </button>`;
   }).join('');
   host.classList.add('is-visible');
