@@ -540,13 +540,48 @@ async function extractPdfText(file) {
   const lib = await loadPdfJs();
   const buf = await file.arrayBuffer();
   const pdf = await lib.getDocument({ data: buf }).promise;
-  const pages = [];
+
+  // First pass: collect all font heights across the doc so we know what's "body".
+  // Anything meaningfully larger than the median is almost certainly a heading —
+  // which is the single most useful structural signal for category detection.
+  const pagesRaw = [];
+  const allHeights = [];
   for (let i = 1; i <= pdf.numPages; i++) {
     const page = await pdf.getPage(i);
     const content = await page.getTextContent();
-    const text = content.items.map(it => it.str).join(' ').replace(/\s+/g, ' ').trim();
-    pages.push({ page: i, text });
+    pagesRaw.push({ page: i, items: content.items });
+    for (const it of content.items) {
+      const h = Math.abs((it.transform && it.transform[0]) || it.height || 0);
+      if (h > 0 && it.str && it.str.trim()) allHeights.push(h);
+    }
   }
+  // Median body height. Heading threshold = body * 1.15 (catches bold/larger,
+  // ignores minor kerning jitter). Falls back gracefully for flat-formatted PDFs.
+  const median = allHeights.length ? allHeights.slice().sort((a,b)=>a-b)[Math.floor(allHeights.length/2)] : 0;
+  const HEADING_THRESHOLD = median * 1.15;
+
+  const pages = pagesRaw.map(({ page, items }) => {
+    // Mark heading-sized runs with [H] prefix on their own line. Leave body text alone.
+    // Consecutive heading-sized items get merged so "Advance treaty" stays one heading,
+    // not two.
+    const lines = [];
+    let headingBuf = '';
+    for (const it of items) {
+      const s = String(it.str || '');
+      if (!s.trim()) continue;
+      const h = Math.abs((it.transform && it.transform[0]) || it.height || 0);
+      const isHeading = HEADING_THRESHOLD > 0 && h >= HEADING_THRESHOLD;
+      if (isHeading) {
+        headingBuf += (headingBuf ? ' ' : '') + s.trim();
+      } else {
+        if (headingBuf) { lines.push(`[H] ${headingBuf}`); headingBuf = ''; }
+        lines.push(s);
+      }
+    }
+    if (headingBuf) lines.push(`[H] ${headingBuf}`);
+    const text = lines.join(' ').replace(/\s+/g, ' ').replace(/\s*\[H\]\s*/g, '\n[H] ').trim();
+    return { page, text };
+  });
   return pages;
 }
 
@@ -568,7 +603,7 @@ Return ONLY a JSON object matching this schema exactly:
 Rules:
 - Extract EVERY formal recommendation, ask, or call-to-action in the submission (typically marked "Recommendation", "We recommend", "The Government should", major bullet asks, or listed under "Major Recommendations"/"Key Asks").
 - "ask" must be a direct verbatim quote. Do not summarise, shorten, or rewrite.
-- "overarching" must also be verbatim — use the document's own chapter/section heading that the recommendation sits under.
+- "overarching" must be a verbatim heading from the document — lines prefixed with [H] in the submission text below are headings detected by font size. Use the nearest preceding [H] heading as the overarching category. Never invent or paraphrase a category label; if no [H] heading precedes an ask, use "Uncategorised".
 - "askPage" = the page number where the recommendation appears.
 - Do not invent recommendations. If the document has few, return few.
 - Return ONLY the JSON object. No prose, no code fences.
