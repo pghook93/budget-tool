@@ -447,7 +447,7 @@
     /* Header stays anchored near the top; body + CTA are vertically centred
        in the remaining space using an auto-margin trick below. */
     justify-content:flex-start;
-    padding:clamp(3rem,10vh,6.5rem) clamp(1.25rem,5vw,3rem) 3rem;
+    padding:clamp(2.25rem,7vh,4.5rem) clamp(1.25rem,5vw,3rem) 3rem;
     /* Subtle gradient only — the starfield canvas behind is visible through it. */
     background:
       radial-gradient(1100px 650px at 20% 15%, hsla(230,55%,22%,0.32), transparent 62%),
@@ -461,21 +461,21 @@
   .welcome-inner{max-width:760px;width:100%;text-align:center;
     display:flex;flex-direction:column;align-items:center;gap:1.5rem}
   .welcome-title{font-family:'Inter','Helvetica Neue',Arial,sans-serif;
-    font-size:clamp(2.8rem,6vw,4rem);font-weight:700;
+    font-size:clamp(2.4rem,5vw,3.4rem);font-weight:700;
     letter-spacing:-.03em;line-height:1.05;color:#ffffff;margin:0}
   .welcome-title .welcome-org{color:var(--accent)}
   /* Body block is pushed to vertical centre of the page: auto top margin
      consumes the space between the header and the viewport middle, and auto
      bottom keeps it balanced against the footer. */
   .welcome-body-block{display:flex;flex-direction:column;align-items:center;
-    gap:1.5rem;width:100%;margin-top:auto;margin-bottom:auto;
+    gap:2rem;width:100%;margin-top:auto;margin-bottom:auto;
     padding-top:1rem}
-  .welcome-body{color:var(--text);font-size:var(--text-sm);line-height:1.7;
-    max-width:72ch;margin:0}
-  .welcome-body p{margin:0 0 .95rem}
+  .welcome-body{color:var(--text);font-size:clamp(1rem,1.15vw,1.0625rem);line-height:1.65;
+    max-width:62ch;margin:0;text-align:center}
+  .welcome-body p{margin:0 0 1rem}
   .welcome-body p:last-child{margin-bottom:0}
-  .welcome-cta{margin-top:1rem;padding:1rem 3rem;min-height:56px;
-    font-size:var(--text-lg);font-weight:600;letter-spacing:-.01em;
+  .welcome-cta{margin-top:.25rem;padding:.95rem 2.75rem;min-height:52px;
+    font-size:var(--text-base);font-weight:600;letter-spacing:-.01em;
     background:hsla(0,0%,100%,0.95);color:var(--text-inverse);
     border:1px solid hsla(0,0%,100%,0.95);border-radius:999px;
     cursor:pointer;font-family:inherit;
