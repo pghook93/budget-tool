@@ -2612,59 +2612,36 @@ function buildFocusContext() {
 }
 
 function buildInsightsPrompt(focusContext, corpus) {
-  return `You are a policy analyst supporting an advocacy organisation's review of an Australian Federal Budget.
+  return `You are a policy analyst reviewing an Australian Federal Budget for an advocacy organisation.
 
-Your job is to read the organisation's STRATEGIC FOCUS and STRATEGIC PLAN below and surface budget measures that are meaningful to them given who they are and what they care about — the wins they would want to know about, and the risks they should be alert to.
-
-This is NOT about pre-budget submission asks. A separate section of the tool already covers those. You are looking at the budget through the lens of the organisation's strategic priorities, not their submission. Write in that frame: talk about the organisation's priorities, populations, policy areas, and strategic positioning — never about "asks" or the submission.
+Read the organisation's context below, then surface budget measures that align with their strategic priorities (wins) and measures that cut against them (risks). Frame everything in terms of their priorities, populations, and policy areas.
 
 ${focusContext}
 
-BUDGET EVIDENCE (verbatim text from uploaded budget documents, with document name and page markers):
+BUDGET EVIDENCE:
 ${corpus}
 
-Return ONLY a JSON object matching this schema exactly:
+RETURN ONLY this JSON object (no prose, no code fences):
 {
-  "unaskedPriorities": [
-    {
-      "title": "short name of the budget measure",
-      "amount": "dollar figure as written in the budget, e.g. '$50.0 million over 4 years' or 'not costed'",
-      "source": "document name (exact from the === markers)",
-      "pdfPage": "page number as string",
-      "priorityArea": "which strategic priority area this touches (short phrase)",
-      "summary": "ONE sentence, max 30 words, describing what the measure does in plain English",
-      "whyItMatters": "ONE sentence, max 30 words, on why this matters to the organisation's strategy. Never mention \"asks\" or the submission.",
-      "quote": "ONE verbatim sentence from the budget text that describes what the measure actually does (20-40 words). MUST be a full descriptive sentence, NOT a section heading, title, or fragment like 'Housing Support'. If no such sentence exists, omit this field."
-    }
-  ],
-  "risks": [
-    {
-      "title": "short name of the budget measure or pattern",
-      "amount": "dollar figure as written in the budget, or 'not costed'",
-      "source": "document name (exact from the === markers)",
-      "pdfPage": "page number as string",
-      "priorityArea": "which strategic priority this threatens (short phrase)",
-      "summary": "ONE sentence, max 30 words, describing the measure",
-      "whyItMatters": "ONE sentence, max 30 words, on why this undercuts the organisation's strategic position. Never mention \"asks\" or the submission.",
-      "quote": "ONE verbatim descriptive sentence from the budget text (20-40 words). MUST be a full sentence describing the measure, NOT a heading or title fragment. If no such sentence exists, omit this field."
-    }
-  ]
+  "unaskedPriorities": [ { "title": "", "amount": "", "source": "", "pdfPage": "", "priorityArea": "", "summary": "", "whyItMatters": "", "quote": "" } ],
+  "risks":              [ { "title": "", "amount": "", "source": "", "pdfPage": "", "priorityArea": "", "summary": "", "whyItMatters": "", "quote": "" } ]
 }
 
-Rules:
-- Frame everything through the organisation's STRATEGIC FOCUS and STRATEGIC PLAN. If neither is present, infer their priority areas from the submission asks, but still describe findings in terms of priorities and populations, not "asks".
-- Never use the words "ask", "asks", "submission", "pre-budget submission", or "asks register" in any output field. Those belong to the separate section of the tool, not this one.
-- Use the SUBMISSION ASKS block (if provided) ONLY to avoid surfacing budget measures that directly duplicate items already covered in the asks section.
-- Only include budget measures genuinely relevant to the organisation's strategic priorities. Do not pad with generic measures.
-- "unaskedPriorities" = budget measures the organisation would likely welcome, engage with, or want to capitalise on — things aligned with their strategy.
-- "risks" = budget measures that cut against the organisation's strategic position (reforms that undercut their advocacy, cuts to relevant programs, shifts that complicate service delivery, etc.).
-- Return AT MOST 6 items per category. Pick only the most significant. Empty array is valid if nothing qualifies.
-- Keep every string field as short as possible. Favour brevity over completeness. A truncated JSON response is useless — terse but complete is the goal.
-- All quotes must be verbatim from the budget text. Do not invent measures or figures.
-- Quotes must be FULL DESCRIPTIVE SENTENCES (typically 15+ words, containing a verb and explanation of what the measure does). Never use a section heading, program name, or short title fragment as a quote. If the only verbatim text available is a heading, omit the quote field entirely rather than using it.
-- The "amount" field MUST match a dollar figure that appears in the "quote" (or directly adjacent to it in the source). Do NOT use a total programme envelope as the "amount" when the "quote" describes a sub-component with a different figure. If the heading figure and the sentence figure differ, prefer the figure from the descriptive sentence and use THAT sentence as the quote.
-- Sort each list by how significant the item is (most significant first).
-- Return ONLY the JSON object. No prose, no code fences.`;
+FIELD RULES:
+- title: short name of the measure.
+- amount: dollar figure as written (e.g. "$50.0 million over 4 years"), or "not costed". MUST match a figure in the quote. If a heading figure and a sentence figure disagree, use the sentence figure.
+- source + pdfPage: exact document name and page from the === markers in the budget evidence.
+- priorityArea: short phrase naming which of the organisation's strategic priorities this touches or threatens.
+- summary: ONE sentence, max 30 words.
+- whyItMatters: ONE sentence, max 30 words, on why this matters to the organisation's strategy.
+- quote: ONE verbatim descriptive sentence from the budget text (15-40 words, contains a verb and describes what the measure does). Never use a heading, program name, or short title fragment. Omit the field if no such sentence exists.
+
+SELECTION RULES:
+- Include only measures clearly relevant to the organisation's strategic priorities. Do not pad.
+- unaskedPriorities = wins (measures aligned with the org's strategy). risks = measures that undercut it.
+- If SUBMISSION ASKS are provided, use them ONLY to skip duplicates already covered elsewhere in the tool. Never mention "ask", "asks", "submission", "pre-budget submission", or "asks register" in any output field.
+- Max 6 items per category. Sort most significant first. Empty array is valid.
+- Be terse. A truncated JSON response is useless — short fields that complete are better than long fields that cut off.`;
 }
 
 function renderInsights(data) {
