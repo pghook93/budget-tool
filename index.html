@@ -641,8 +641,12 @@ async function geminiFetchOnce({ prompt, temperature = 0.1, signal, onTick }) {
 
   if (!res.ok) {
     const errText = await res.text().catch(() => '');
-    const err = new Error(`Worker returned ${res.status}: ${errText.slice(0, 300)}`);
+    // Hide raw JSON/technical payload from end users — keep it in console for debugging only.
+    if (errText) console.warn(`Worker ${res.status} response body:`, errText);
+    const friendly = friendlyHttpMessage(res.status);
+    const err = new Error(friendly);
     err.status = res.status;
+    err.rawText = errText;
     err.retryable = RETRYABLE_HTTP_STATUSES.has(res.status);
     throw err;
   }
@@ -687,13 +691,57 @@ async function geminiFetchWithRetry(opts, statusFn) {
       await new Promise(r => setTimeout(r, backoffMs));
     }
   }
-  // Friendlier final message for the most common failure mode.
-  const msg = lastErr && lastErr.status === 524
-    ? 'Gemini timed out extracting this document. For long PDFs (50+ pages) this can happen under load. Try again in a minute, or split the PDF into smaller files.'
-    : (lastErr && lastErr.message) || 'Unknown error after retries.';
+  // Final surface: always human-readable, never raw JSON.
+  const msg = finalErrorMessage(lastErr);
   const out = new Error(msg);
   if (lastErr && lastErr.status) out.status = lastErr.status;
   throw out;
+}
+
+// Map HTTP status codes from the Worker to plain-English messages.
+function friendlyHttpMessage(status) {
+  switch (status) {
+    case 408: return 'The request timed out before Gemini finished. Retrying…';
+    case 429: return 'Gemini is rate-limiting us right now. Retrying in a moment…';
+    case 500:
+    case 502:
+    case 503: return 'Gemini is temporarily unavailable. Retrying…';
+    case 504: return 'Gemini took too long to respond. Retrying…';
+    case 520:
+    case 521:
+    case 522:
+    case 523:
+    case 524:
+    case 525:
+    case 526:
+    case 527:
+    case 530: return 'Connection to Gemini timed out. Retrying…';
+    default: return `Request failed (status ${status}). Retrying…`;
+  }
+}
+
+// Pick the friendliest final message after all retries are exhausted.
+function finalErrorMessage(err) {
+  if (!err) return 'The request failed after several retries. Please try again in a minute.';
+  const status = err.status;
+  if (status === 524 || status === 504 || status === 408) {
+    return 'Gemini timed out while processing this request. This usually happens when the document is very long or Gemini is under load. Please try again in a minute — if it keeps failing, try splitting long PDFs into smaller files.';
+  }
+  if (status === 429) {
+    return 'Gemini is rate-limiting us right now. Please wait 30-60 seconds and try again.';
+  }
+  if (status === 503 || status === 502 || status === 500) {
+    return 'Gemini is temporarily unavailable. Please try again in a minute.';
+  }
+  if (status >= 520 && status <= 530) {
+    return 'The connection to Gemini dropped. Please try again in a minute.';
+  }
+  // Non-HTTP errors (network, timeout, parse) — keep the message but ensure no JSON leaked.
+  const msg = String(err.message || 'Unknown error.');
+  if (/^\{|^\[/.test(msg.trim())) {
+    return 'The request failed after several retries. Please try again in a minute.';
+  }
+  return msg;
 }
 
 // Back-compat shim for existing callers that used callGemini(prompt, onTick).
@@ -743,6 +791,7 @@ async function extractAsksFromPages(pages, statusFn) {
   // Chunked path.
   statusFn(`Document is ${pages.length} pages — splitting into ${chunks.length} chunks for reliable extraction…`);
   const allRows = [];
+  const chunkFailures = [];
   for (let i = 0; i < chunks.length; i++) {
     const chunk = chunks[i];
     const firstPage = chunk[0].page;
@@ -761,6 +810,7 @@ async function extractAsksFromPages(pages, statusFn) {
     } catch (err) {
       // One failed chunk shouldn't kill the whole extraction. Log and continue.
       console.error(`Extraction failed for ${chunkLabel}:`, err);
+      chunkFailures.push({ chunkLabel, reason: err.message || 'unknown error' });
       statusFn(`Warning: ${chunkLabel} failed (${err.message}). Continuing with remaining chunks…`);
     }
   }
@@ -774,7 +824,7 @@ async function extractAsksFromPages(pages, statusFn) {
     seen.add(key);
     deduped.push(r);
   }
-  return { rows: deduped };
+  return { rows: deduped, chunkFailures };
 }
 
 function rowsFromExtraction(extracted) {
@@ -806,8 +856,13 @@ document.getElementById('pdfUpload').addEventListener('change', async (e) => {
     setUploadStatus(`Read ${pages.length} pages (${totalChars.toLocaleString()} chars). ${lengthHint}`, 'working');
     const extracted = await extractAsksFromPages(pages, (msg) => setUploadStatus(msg, 'working'));
     const newRows = rowsFromExtraction(extracted);
+    const failures = Array.isArray(extracted.chunkFailures) ? extracted.chunkFailures : [];
     if (!newRows.length) {
-      setUploadStatus('No recommendations found in this PDF. Check the document — it should contain clearly numbered or listed asks (e.g. "Recommendation 1", "We recommend…", "The Government should…").', 'error');
+      if (failures.length) {
+        setUploadStatus(`Extraction failed: ${failures.length} of the document chunks couldn't be processed (${failures[0].reason}). No recommendations were extracted. Please try again in a minute, or split the PDF into smaller files.`, 'error');
+      } else {
+        setUploadStatus('No recommendations found in this PDF. Check the document — it should contain clearly numbered or listed asks (e.g. "Recommendation 1", "We recommend…", "The Government should…").', 'error');
+      }
       return;
     }
     rows = newRows;
@@ -819,7 +874,12 @@ document.getElementById('pdfUpload').addEventListener('change', async (e) => {
     render();
     updateEvaluateButtonState();
     if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
-    setUploadStatus(`Extracted ${newRows.length} asks from "${file.name}". Now upload budget documents (BP2, PBS) in Step 2 and click "Evaluate all asks" in Step 3.`, 'ok');
+    if (failures.length) {
+      const partial = ` ⚠️ ${failures.length} chunk${failures.length === 1 ? '' : 's'} failed during extraction — some recommendations may be missing. Try re-uploading the document if the ask count looks low.`;
+      setUploadStatus(`Extracted ${newRows.length} asks from "${file.name}".${partial} Now upload budget documents (BP2, PBS) in Step 2 and click "Evaluate all asks" in Step 3.`, 'error');
+    } else {
+      setUploadStatus(`Extracted ${newRows.length} asks from "${file.name}". Now upload budget documents (BP2, PBS) in Step 2 and click "Evaluate all asks" in Step 3.`, 'ok');
+    }
   } catch (err) {
     console.error(err);
     setUploadStatus(`Upload failed: ${err.message}`, 'error');
@@ -888,12 +948,59 @@ document.getElementById('clearBudgetBtn').addEventListener('click', () => {
   if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
 });
 
-function buildBudgetCorpus() {
-  // Concatenate all uploaded budget docs, labelled, with page markers.
-  return budgetDocs.map(d => {
-    const body = d.pages.map(p => `=== ${d.name} · PAGE ${p.page} ===\n${p.text}`).join('\n\n');
-    return body;
-  }).join('\n\n========================================\n\n');
+// Maximum budget corpus size we send to Gemini.
+// 150k chars ≈ ~40k tokens. Keeps prompt well under the 90s single-call window
+// even with extraction/eval prompt scaffolding and long ask text.
+const BUDGET_CORPUS_MAX_CHARS = 150000;
+// Hard ceiling on the entire prompt (corpus + scaffolding + user inputs).
+// Gemini 2.5 Flash handles far larger inputs in theory, but wall-clock time
+// grows superlinearly past ~400k chars and trips the Worker's 90s first-attempt.
+const PROMPT_MAX_CHARS = 400000;
+
+// Smart head+tail truncation: preserves the start and end of a string,
+// inserting a marker in the middle. Good for budget docs where BP2 summaries
+// live near the front and PBS detail sits at the back.
+function truncateHeadTail(s, maxChars, label) {
+  if (!s || s.length <= maxChars) return s;
+  const marker = `\n\n[… ${label || 'content'} truncated for length (${(s.length - maxChars).toLocaleString()} chars dropped) …]\n\n`;
+  const keep = maxChars - marker.length;
+  if (keep <= 0) return s.slice(0, maxChars);
+  const head = Math.floor(keep * 0.6);
+  const tail = keep - head;
+  return s.slice(0, head) + marker + s.slice(-tail);
+}
+
+function buildBudgetCorpus(opts) {
+  const maxChars = (opts && Number.isFinite(opts.maxChars)) ? opts.maxChars : BUDGET_CORPUS_MAX_CHARS;
+  // Build each doc's body independently so we can truncate each one
+  // proportionally rather than dropping trailing docs entirely.
+  const docs = budgetDocs.map(d => ({
+    name: d.name,
+    body: d.pages.map(p => `=== ${d.name} · PAGE ${p.page} ===\n${p.text}`).join('\n\n'),
+  }));
+  if (!docs.length) return '';
+  const totalRaw = docs.reduce((n, d) => n + d.body.length, 0);
+  if (totalRaw <= maxChars) {
+    return docs.map(d => d.body).join('\n\n========================================\n\n');
+  }
+  // Proportional allocation: each doc gets a share of the budget based on its size,
+  // with a small floor so a tiny PBS doesn't vanish next to a huge BP2.
+  const minPerDoc = Math.min(8000, Math.floor(maxChars / docs.length));
+  const remaining = Math.max(0, maxChars - minPerDoc * docs.length);
+  const scale = remaining / totalRaw;
+  const truncated = docs.map(d => {
+    const quota = minPerDoc + Math.floor(d.body.length * scale);
+    return truncateHeadTail(d.body, quota, `${d.name} body`);
+  });
+  return truncated.join('\n\n========================================\n\n');
+}
+
+// Pre-flight: if the whole prompt is still enormous after corpus capping,
+// chop it down smartly so we never hit the Worker's 90s ceiling.
+function enforcePromptCeiling(prompt, label) {
+  if (prompt.length <= PROMPT_MAX_CHARS) return prompt;
+  console.warn(`${label || 'Prompt'} is ${prompt.length.toLocaleString()} chars — exceeds ${PROMPT_MAX_CHARS.toLocaleString()} ceiling. Truncating head+tail.`);
+  return truncateHeadTail(prompt, PROMPT_MAX_CHARS, label || 'prompt');
 }
 
 function buildEvaluationPrompt(ask, overarching, corpus) {
@@ -939,7 +1046,7 @@ Rules:
 }
 
 async function evaluateOneAsk(row, corpus, signal, retryStatusFn) {
-  const prompt = buildEvaluationPrompt(row.ask, row.overarching, corpus);
+  const prompt = enforcePromptCeiling(buildEvaluationPrompt(row.ask, row.overarching, corpus), 'Evaluation prompt');
   return geminiFetchWithRetry({ prompt, temperature: 0.1, signal }, retryStatusFn);
 }
 
@@ -967,9 +1074,13 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   stopBtn.style.display = '';
   evalAbortController = new AbortController();
   const signal = evalAbortController.signal;
+  const totalRaw = budgetDocs.reduce((n, d) => n + d.totalChars, 0);
   const corpus = buildBudgetCorpus();
   const totalChars = corpus.length;
-  setEvalStatus(`Starting evaluation of ${rows.length} asks against ${totalChars.toLocaleString()} chars of budget text…`, 'working');
+  const truncatedNote = totalRaw > totalChars
+    ? ` (trimmed from ${totalRaw.toLocaleString()} for speed — head + tail preserved)`
+    : '';
+  setEvalStatus(`Starting evaluation of ${rows.length} asks against ${totalChars.toLocaleString()} chars of budget text${truncatedNote}…`, 'working');
 
   // Only evaluate rows that haven't been successfully evaluated yet — so re-clicking
   // Evaluate picks up any that failed or were skipped previously.
@@ -1007,7 +1118,7 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
       if (err.name === 'AbortError' && signal.aborted) break;
       console.error('Evaluation failed for row', row.id, err);
       failed++;
-      failures.push({ ask: row.ask.slice(0, 80), reason: err.name === 'AbortError' ? 'connection dropped / timeout' : (err.message || 'unknown error') });
+      failures.push({ ask: row.ask.slice(0, 80), reason: err.name === 'AbortError' ? 'timed out, will retry on next click' : (err.message || 'unknown error') });
     }
   }
   stopBtn.style.display = 'none';
@@ -1244,10 +1355,14 @@ document.getElementById('insightsBtn').addEventListener('click', async () => {
     btn.disabled = false; stopBtn.style.display = 'none';
     return;
   }
+  const totalRawInsights = budgetDocs.reduce((n, d) => n + d.totalChars, 0);
   const corpus = buildBudgetCorpus();
-  const prompt = buildInsightsPrompt(focusContext, corpus);
+  const prompt = enforcePromptCeiling(buildInsightsPrompt(focusContext, corpus), 'Insights prompt');
 
-  setInsightsStatus(`Generating insights against ${corpus.length.toLocaleString()} chars of budget text… (typically 45-90s)`, 'working');
+  const truncatedNote = totalRawInsights > corpus.length
+    ? ` (trimmed from ${totalRawInsights.toLocaleString()} for speed — head + tail preserved)`
+    : '';
+  setInsightsStatus(`Generating insights against ${corpus.length.toLocaleString()} chars of budget text${truncatedNote}… (typically 45-90s)`, 'working');
   const startedAt = Date.now();
 
   try {
