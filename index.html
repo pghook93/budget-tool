@@ -962,7 +962,9 @@ async function extractAsksFromPages(pages, statusFn) {
 // Strip generic summary/container prefixes from the overarching category so
 // a section heading like "Housing and homelessness" doesn't get saved as
 // "Recommendations Housing and homelessness" when the ask sits under a
-// "Recommendations at a glance" TOC.
+// "Recommendations at a glance" TOC. Also normalise the casing — docs mix
+// ALL CAPS, Title Case, and sentence case inconsistently, so we force
+// sentence case across the board for a clean register.
 function cleanOverarching(s) {
   if (!s) return 'Uncategorised';
   let out = String(s).trim();
@@ -971,7 +973,44 @@ function cleanOverarching(s) {
   out = out.replace(/^(?:our\s+|summary\s+of\s+|major\s+|key\s+)?recommendation[s:]*\s+(?:at\s+a\s+glance\s+)?/i, '');
   out = out.replace(/^key\s+asks?\s+/i, '');
   out = out.trim();
-  return out || 'Uncategorised';
+  if (!out) return 'Uncategorised';
+  out = toSentenceCase(out);
+  return out;
+}
+
+// Convert any casing to sentence case while preserving known proper nouns,
+// acronyms, and abbreviations so "HOUSING AND HOMELESSNESS" becomes
+// "Housing and homelessness" but "NDIS funding" stays "NDIS funding" and
+// "Aboriginal and Torres Strait Islander peoples" keeps its proper nouns.
+function toSentenceCase(s) {
+  if (!s) return s;
+  // Known terms that must keep their casing. Matched case-insensitively but
+  // rendered in their canonical form. Kept short and focused on Australian
+  // social-policy vocabulary — the list the user's cohort actually uses.
+  const PRESERVE = [
+    'NDIS', 'ACOSS', 'VCOSS', 'QCOSS', 'NCOSS', 'SACOSS', 'WACOSS', 'TasCOSS',
+    'COAG', 'ATO', 'ABS', 'DSS', 'DVA', 'DSP', 'CRA', 'FHSS', 'GST', 'HECS',
+    'JobSeeker', 'JobKeeper', 'Medicare', 'Centrelink', 'PBS', 'MBS',
+    'Australia', 'Australian', 'Australians',
+    'Commonwealth', 'Federal', 'State', 'Territory',
+    'Victoria', 'Victorian', 'NSW', 'Queensland', 'Tasmania', 'Tasmanian',
+    'South Australia', 'South Australian', 'Western Australia', 'Western Australian',
+    'Northern Territory', 'ACT',
+    'Aboriginal', 'Torres Strait Islander', 'First Nations', 'Indigenous',
+    'LGBTIQ+', 'LGBTIQ', 'LGBTQI+', 'LGBTQI',
+    'COVID', 'COVID-19',
+  ];
+  // First pass: lowercase everything, then capitalise only the first letter
+  // of the first word.
+  let out = s.toLowerCase();
+  out = out.replace(/^(\s*)(\S)/, (_, sp, c) => sp + c.toUpperCase());
+  // Second pass: reinstate preserved terms anywhere they appear (word-boundary
+  // matched so "federal" in "federalism" is left alone).
+  for (const term of PRESERVE) {
+    const re = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
+    out = out.replace(re, term);
+  }
+  return out;
 }
 
 // Scrub footnote markers, cross-references, and stray page-number artefacts
