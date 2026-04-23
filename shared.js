@@ -129,6 +129,17 @@
     out = out.replace(/([\w.\)\]\?!\u201D\u2019"'])\s+\d{1,3}\s*$/g, '$1');
     // 4. Collapse double spaces and stray orphan punctuation.
     out = out.replace(/\s+/g, ' ').replace(/\s+([,.;:!?])/g, '$1').trim();
+    // 5. Uppercase parenthesised acronyms: "(Cdp)" → "(CDP)", "(Ndis)" →
+    //    "(NDIS)". Only triggers on 2-6 letter all-letter tokens inside
+    //    parentheses, so "(see…)" or "(e.g.)" stay untouched.
+    out = out.replace(/\(([A-Za-z]{2,6})\)/g, function (_m, acr) {
+      return '(' + acr.toUpperCase() + ')';
+    });
+    // 6. Ensure the ask starts with a capital letter. PDFs sometimes emit
+    //    asks that begin lowercase (e.g. bullet continuations).
+    if (out.length) {
+      out = out.charAt(0).toUpperCase() + out.slice(1);
+    }
     return out;
   }
 
