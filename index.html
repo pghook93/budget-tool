@@ -444,7 +444,8 @@
      ==========================================================================*/
   .welcome-screen{position:fixed;inset:0;z-index:50;display:none;
     flex-direction:column;align-items:center;
-    /* Title sits slightly above centre for a more deliberate landing feel. */
+    /* Header stays anchored near the top; body + CTA are vertically centred
+       in the remaining space using an auto-margin trick below. */
     justify-content:flex-start;
     padding:clamp(3rem,10vh,6.5rem) clamp(1.25rem,5vw,3rem) 3rem;
     /* Subtle gradient only — the starfield canvas behind is visible through it. */
@@ -463,8 +464,14 @@
     font-size:clamp(2.8rem,6vw,4rem);font-weight:700;
     letter-spacing:-.03em;line-height:1.05;color:#ffffff;margin:0}
   .welcome-title .welcome-org{color:var(--accent)}
+  /* Body block is pushed to vertical centre of the page: auto top margin
+     consumes the space between the header and the viewport middle, and auto
+     bottom keeps it balanced against the footer. */
+  .welcome-body-block{display:flex;flex-direction:column;align-items:center;
+    gap:1.5rem;width:100%;margin-top:auto;margin-bottom:auto;
+    padding-top:1rem}
   .welcome-body{color:var(--text);font-size:var(--text-sm);line-height:1.7;
-    max-width:58ch;margin:0}
+    max-width:72ch;margin:0}
   .welcome-body p{margin:0 0 .95rem}
   .welcome-body p:last-child{margin-bottom:0}
   .welcome-cta{margin-top:1rem;padding:1rem 3rem;min-height:56px;
@@ -550,6 +557,8 @@
   </div>
   <div class="welcome-inner">
     <h1 class="welcome-title" id="welcomeTitle">Welcome <span class="welcome-org" id="welcomeOrg">friend</span></h1>
+  </div>
+  <div class="welcome-body-block">
     <div class="welcome-body">
       <p>This is just a practice run so you can see how the tool works end-to-end.</p>
       <p>We've pre-loaded your pre-budget submission from last year. All you need to do is upload last year's budget papers and click <strong>Evaluate</strong>. The tool will systematically check every one of your asks against the Budget.</p>
