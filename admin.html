@@ -84,6 +84,7 @@
   .brand{display:flex;align-items:center;gap:.6rem;margin:0 0 1rem}
   .brand-dot{width:10px;height:10px;border-radius:50%;background:var(--primary)}
 </style>
+<script src="shared.js"></script>
 </head>
 <body>
 
@@ -732,54 +733,8 @@ function normAsk(s) {
   return String(s || '').toLowerCase().replace(/\s+/g,' ').replace(/[\u2018\u2019\u201c\u201d"'`]/g,'').trim();
 }
 
-// Post-process: clean ask text + overarching casing — mirrors viewer.
-function cleanAskText(s) {
-  if (!s) return '';
-  let out = String(s);
-  out = out.replace(/\s*\((?:see also|see|cf\.?|refer to|also see)[^()]*\)\s*/gi, ' ');
-  out = out.replace(/\s+(?:page|p\.?)\s+\d+(?:\s+\d+)?\s*\.?\s*$/gi, '');
-  out = out.replace(/([\w.\)\]\?!\u201D\u2019"'])\s+\d{1,3}\s*$/g, '$1');
-  out = out.replace(/\s+/g,' ').replace(/\s+([,.;:!?])/g,'$1').trim();
-  return out;
-}
-// AP-style title case with preserved acronyms/proper nouns. Mirror of the
-// viewer's toTitleCase so admin + viewer render categories identically.
-function toTitleCase(s) {
-  if (!s) return s;
-  const SMALL = new Set(['a','an','and','as','at','but','by','for','in','nor','of','on','or','the','to','vs','via']);
-  const PRESERVE = ['NDIS','ACOSS','VCOSS','QCOSS','NCOSS','SACOSS','WACOSS','TasCOSS','COAG','ATO','ABS','DSS','DVA','DSP','CRA','FHSS','GST','HECS','JobSeeker','JobKeeper','Medicare','Centrelink','PBS','MBS','Australia','Australian','Australians','Commonwealth','Federal','State','Territory','Victoria','Victorian','NSW','Queensland','Tasmania','Tasmanian','South Australia','South Australian','Western Australia','Western Australian','Northern Territory','ACT','Aboriginal','Torres Strait Islander','First Nations','Indigenous','LGBTIQ+','LGBTIQ','LGBTQI+','LGBTQI','COVID','COVID-19'];
-  const tokens = s.split(/(\s+)/);
-  const wordIdx = [];
-  tokens.forEach((t,i)=>{ if(!/^\s+$/.test(t) && t.length) wordIdx.push(i); });
-  const firstIdx = wordIdx[0], lastIdx = wordIdx[wordIdx.length-1];
-  const titled = tokens.map((tok,i) => {
-    if (/^\s+$/.test(tok) || !tok) return tok;
-    const lower = tok.toLowerCase();
-    const core = lower.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu,'');
-    const leading = lower.slice(0, lower.indexOf(core));
-    const trailing = core ? lower.slice(lower.indexOf(core) + core.length) : '';
-    const isSmall = SMALL.has(core);
-    const isEdge = i === firstIdx || i === lastIdx;
-    if (isSmall && !isEdge) return leading + core + trailing;
-    const capped = core.split('-').map(p => p ? p.charAt(0).toUpperCase() + p.slice(1) : p).join('-');
-    return leading + capped + trailing;
-  }).join('');
-  let out = titled;
-  for (const term of PRESERVE) {
-    const re = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\b`, 'gi');
-    out = out.replace(re, term);
-  }
-  return out;
-}
-function cleanOverarching(s) {
-  if (!s) return 'Uncategorised';
-  let out = String(s).trim();
-  out = out.replace(/^(?:our\s+|summary\s+of\s+|major\s+|key\s+)?recommendation[s:]*\s+(?:at\s+a\s+glance\s+)?/i, '');
-  out = out.replace(/^key\s+asks?\s+/i, '');
-  out = out.trim();
-  if (!out) return 'Uncategorised';
-  return toTitleCase(out);
-}
+// cleanAskText(), cleanOverarching(), toTitleCase() are provided by shared.js
+// (loaded in <head>) so admin and viewer share one casing/cleanup ruleset.
 
 async function callGeminiWithRetry(prompt, onTick) {
   const body = { contents: [{ role: 'user', parts: [{ text: prompt }] }], generationConfig: { temperature: 0.1, responseMimeType: 'application/json' } };

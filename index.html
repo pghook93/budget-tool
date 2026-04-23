@@ -205,6 +205,7 @@
   .preset-banner .preset-banner-meta{color:var(--text-muted);font-size:var(--text-xs);margin:0}
   .preset-banner .preset-banner-error{color:var(--error);font-weight:600}
 </style>
+<script src="shared.js"></script>
 </head>
 <body>
 <div class="shell">
@@ -978,115 +979,10 @@ async function extractAsksFromPages(pages, statusFn) {
   return { rows: deduped, chunkFailures };
 }
 
-// Strip generic summary/container prefixes from the overarching category so
-// a section heading like "Housing and homelessness" doesn't get saved as
-// "Recommendations Housing and homelessness" when the ask sits under a
-// "Recommendations at a glance" TOC. Also normalise the casing — docs mix
-// ALL CAPS, Title Case, and sentence case inconsistently, so we force
-// AP-style title case across the board for a clean, consistent register.
-function cleanOverarching(s) {
-  if (!s) return 'Uncategorised';
-  let out = String(s).trim();
-  // Remove leading "Recommendations", "Recommendation:", "Our recommendations",
-  // "Key asks", "Summary of recommendations", "Major recommendations", etc.
-  out = out.replace(/^(?:our\s+|summary\s+of\s+|major\s+|key\s+)?recommendation[s:]*\s+(?:at\s+a\s+glance\s+)?/i, '');
-  out = out.replace(/^key\s+asks?\s+/i, '');
-  out = out.trim();
-  if (!out) return 'Uncategorised';
-  out = toTitleCase(out);
-  return out;
-}
+// cleanOverarching() and toTitleCase() live in shared.js (loaded in <head>)
+// so the viewer and admin page can never drift on casing rules.
 
-// Convert any casing to AP-style title case: every significant word capitalised,
-// short function words (and, or, the, of, in, to, for, on, at, by, a, an, as,
-// but, nor, vs) stay lowercase unless they are the first or last word. Known
-// proper nouns, acronyms, and abbreviations are always preserved in their
-// canonical form — so "HOUSING AND HOMELESSNESS" → "Housing and Homelessness",
-// "cost of living" → "Cost of Living", "ndis funding" → "NDIS Funding", and
-// "aboriginal and torres strait islander peoples" → "Aboriginal and Torres
-// Strait Islander Peoples".
-function toTitleCase(s) {
-  if (!s) return s;
-  // Short words that stay lowercase in title case unless first/last.
-  const SMALL = new Set([
-    'a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of',
-    'on', 'or', 'the', 'to', 'vs', 'via',
-  ]);
-  // Known terms that must keep their casing. Matched case-insensitively but
-  // rendered in their canonical form. Kept short and focused on Australian
-  // social-policy vocabulary — the list the user's cohort actually uses.
-  const PRESERVE = [
-    'NDIS', 'ACOSS', 'VCOSS', 'QCOSS', 'NCOSS', 'SACOSS', 'WACOSS', 'TasCOSS',
-    'COAG', 'ATO', 'ABS', 'DSS', 'DVA', 'DSP', 'CRA', 'FHSS', 'GST', 'HECS',
-    'JobSeeker', 'JobKeeper', 'Medicare', 'Centrelink', 'PBS', 'MBS',
-    'Australia', 'Australian', 'Australians',
-    'Commonwealth', 'Federal', 'State', 'Territory',
-    'Victoria', 'Victorian', 'NSW', 'Queensland', 'Tasmania', 'Tasmanian',
-    'South Australia', 'South Australian', 'Western Australia', 'Western Australian',
-    'Northern Territory', 'ACT',
-    'Aboriginal', 'Torres Strait Islander', 'First Nations', 'Indigenous',
-    'LGBTIQ+', 'LGBTIQ', 'LGBTQI+', 'LGBTQI',
-    'COVID', 'COVID-19',
-  ];
-  // Split on whitespace but keep track of position so we can identify the
-  // first and last "real" word.
-  const tokens = s.split(/(\s+)/); // keeps the whitespace separators
-  const wordIndices = [];
-  tokens.forEach((t, i) => { if (!/^\s+$/.test(t) && t.length) wordIndices.push(i); });
-  const firstIdx = wordIndices[0];
-  const lastIdx = wordIndices[wordIndices.length - 1];
-
-  const titled = tokens.map((tok, i) => {
-    if (/^\s+$/.test(tok) || !tok) return tok;
-    const lower = tok.toLowerCase();
-    // Strip leading/trailing punctuation for the SMALL-word test, but keep it
-    // on the final output.
-    const core = lower.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
-    const leading = lower.slice(0, lower.indexOf(core));
-    const trailing = core ? lower.slice(lower.indexOf(core) + core.length) : '';
-    const isSmall = SMALL.has(core);
-    const isEdge = i === firstIdx || i === lastIdx;
-    if (isSmall && !isEdge) return leading + core + trailing;
-    // Capitalise first letter of the core; handle hyphenated words like
-    // "decision-making" → "Decision-Making".
-    const capped = core.split('-').map(part => {
-      if (!part) return part;
-      return part.charAt(0).toUpperCase() + part.slice(1);
-    }).join('-');
-    return leading + capped + trailing;
-  }).join('');
-
-  // Final pass: reinstate preserved terms anywhere they appear (word-boundary
-  // matched so "federal" in "federalism" is left alone). This runs AFTER title
-  // casing so canonical forms like "NDIS" and "JobSeeker" always win.
-  let out = titled;
-  for (const term of PRESERVE) {
-    const re = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
-    out = out.replace(re, term);
-  }
-  return out;
-}
-
-// Scrub footnote markers, cross-references, and stray page-number artefacts
-// that sneak in from PDF text extraction. Conservative — only targets obvious
-// pagination/reference residue so the substantive policy text is never touched.
-function cleanAskText(s) {
-  if (!s) return '';
-  let out = String(s);
-  // 1. Parenthetical cross-references: "(See also: ... page 9 4.)", "(see p. 12)", etc.
-  out = out.replace(/\s*\((?:see also|see|cf\.?|refer to|also see)[^()]*\)\s*/gi, ' ');
-  // 2. Trailing " page N [M]" or " p. N" fragments at end of sentence (not inside
-  //    normal prose — only when they're the last tokens before a terminator).
-  out = out.replace(/\s+(?:page|p\.?)\s+\d+(?:\s+\d+)?\s*\.?\s*$/gi, '');
-  // 3. Trailing lone superscript-style footnote numbers (e.g. "… energy transition. 19"
-  //    or "… energy transition 19"). Only 1-3 digits, only at end, only after a
-  //    word character + optional punctuation — so we never strip real numbers like
-  //    "$1.2 billion" or "by 2030".
-  out = out.replace(/([\w.\)\]\?!\u201D\u2019"'])\s+\d{1,3}\s*$/g, '$1');
-  // 4. Collapse any double spaces / stray orphan punctuation left behind.
-  out = out.replace(/\s+/g, ' ').replace(/\s+([,.;:!?])/g, '$1').trim();
-  return out;
-}
+// cleanAskText() also lives in shared.js — same reason as cleanOverarching().
 
 function rowsFromExtraction(extracted) {
   if (!extracted || !Array.isArray(extracted.rows)) {
