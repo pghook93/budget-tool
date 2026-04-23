@@ -194,7 +194,7 @@
 
   <section class="card card-pad">
     <h1>Ask register</h1>
-    <p class="lede">Upload a pre-budget submission, then one or more budget documents. The tool extracts each recommendation verbatim, then evaluates whether the budget reflects it. Click any row for the full justification and supporting quotes.</p>
+    <p class="lede">Upload a pre-budget submission and one or more budget documents. The tool extracts each recommendation verbatim, then evaluates whether the budget reflects it. Every row links back to the full justification and supporting quotes.</p>
 
     <div class="step-stack">
       <div class="step" id="step1">
@@ -204,8 +204,7 @@
         </div>
         <label class="btn primary" for="pdfUpload">Upload submission PDF</label>
         <input type="file" id="pdfUpload" accept="application/pdf,.pdf" />
-        <button type="button" class="btn" id="resetToAcossBtn">Reset to ACOSS sample</button>
-        <span class="upload-status" id="uploadStatus">Showing ACOSS 2025-26 pre-budget submission (sample data).</span>
+        <span class="upload-status" id="uploadStatus">No submission loaded. Upload a pre-budget submission PDF to begin.</span>
       </div>
 
       <div class="step" id="step2">
@@ -246,14 +245,14 @@
       </div>
     </div>
 
-    <div class="toolbar">
+    <div class="toolbar" id="registerToolbar" style="display:none">
       <input id="searchBox" class="search-input" type="search" placeholder="Search asks, categories, or evidence…" />
-      <span class="count-note" id="countNote">12 asks</span>
+      <span class="count-note" id="countNote"></span>
       <button type="button" class="btn" id="resetBtn">Reset filters</button>
       <button type="button" class="btn primary" id="downloadCsv">Download CSV</button>
     </div>
 
-    <div class="table-wrap">
+    <div class="table-wrap" id="registerTableWrap" style="display:none">
       <table id="asksTable">
         <thead>
           <tr>
@@ -300,260 +299,13 @@
 
 <script>
 // ============================================================================
-// Sample data: real verbatim extracts from the ACOSS 2025-26 Budget Priorities
-// Statement (https://www.acoss.org.au/wp-content/uploads/2025/02/ACOSS_Budget-
-// Priorities-Statement-2025-26-FINAL-14.1.2025.pdf). Overarching categories
-// are the submission's own chapter headings; asks are verbatim Major
-// Recommendations.
+// No sample data shipped. The register starts empty; rows populate only
+// after the user uploads a pre-budget submission in Step 1.
 // ============================================================================
 const ACOSS_PDF = 'https://www.acoss.org.au/wp-content/uploads/2025/02/ACOSS_Budget-Priorities-Statement-2025-26-FINAL-14.1.2025.pdf';
 const BUDGET_PDF = 'https://budget.gov.au/content/bp2/download/bp2_2025-26.pdf';
 const PBS_INDEX  = 'https://budget.gov.au/content/pbs/index.htm';
 
-const ACOSS_SAMPLE_ROWS = [
-  {
-    id: 1,
-    overarching: 'Investing in quality community support, care and crisis services',
-    ask: 'Provide an immediate funding boost to essential services to help more people in immediate distress and crisis.',
-    askPage: '8',
-    submissionQuote: 'Provide an immediate funding boost to essential services to help more people in immediate distress and crisis.',
-    budgetImpact: '-$440 million',
-    status: 'Partially reflected',
-    reviewState: 'Review ready',
-    confidence: 'Medium',
-    evidenceQuality: 'Medium evidence',
-    plainIssue: 'ACOSS called for a $440m boost to essential crisis services. The budget provides $8.9m over three years for the Housing Services Sector — roughly 2% of the scale sought — with no broader emergency relief, financial counselling, or food relief measure.',
-    rule: 'The budget funds $8.9m over three years for the Housing Services Sector (peak bodies, Safe Places emergency accommodation, complex case management). This is a partial, DFV-weighted response at about 2% of the $440m scale ACOSS sought; no wider emergency relief or crisis-services package was funded.',
-    reviewStateRationale: 'Evidence set is complete enough for a reviewer to confirm or challenge the call without further searching.',
-    confidenceRationale: 'Scale gap is unambiguous ($8.9m over 3 years vs $440m sought), and a broader emergency-relief package would have appeared in headline measures if it existed.',
-    evidenceQualityRationale: 'Named Budget Paper No. 2 measure with dollar figures and sub-components identified; no direct crisis-services boost found after full document review.',
-    evidenceItems: [
-      { source: 'Budget Paper No. 2', printedPage: '72', pdfPage: '60', anchor: BUDGET_PDF + '#page=60', identifier: 'Additional Support for the Housing Services Sector — $8.9m over 3 years', quote: '$6.2 million over three years from 2025–26 to housing and homelessness peak bodies; $2.5 million in 2025–26 for emergency accommodation under the Safe Places Emergency Accommodation Program; $0.2 million in 2025–26 for complex case management.', note: 'The only named community-services funding boost in BP2. DFV-weighted and roughly 2% of the $440m scale ACOSS sought.' },
-      { source: 'Budget Paper No. 2', printedPage: '28', pdfPage: '16', anchor: BUDGET_PDF + '#page=16', identifier: 'Closing the Gap — further investments ($506.4m over 5 years)', quote: 'Includes $50.0m for remote store food security, $21.8m for DFV services for First Nations women and communities, and $11.4m for community laundries in remote First Nations communities.', note: 'Adjacent crisis/support funding, but cohort-specific (First Nations) rather than the general crisis-services boost ACOSS sought.' }
-    ]
-  },
-  {
-    id: 2,
-    overarching: 'Investing in quality community support, care and crisis services',
-    ask: 'Properly fund peak bodies and advocacy organisations to inform public policy development and social service design undertaken by government.',
-    askPage: '8',
-    submissionQuote: 'Properly fund peak bodies and advocacy organisations to inform public policy development and social service design undertaken by government.',
-    budgetImpact: '-$41.5 million',
-    status: 'Partially reflected',
-    reviewState: 'Review ready',
-    confidence: 'Medium',
-    evidenceQuality: 'Medium evidence',
-    plainIssue: 'ACOSS sought broad funding for peak bodies and advocacy organisations across the community sector. The budget funds only housing and homelessness peak bodies ($6.2m over 3 years), not other community-sector peaks or general advocacy capacity.',
-    rule: 'The budget funds $6.2m over three years for housing and homelessness peak bodies to undertake research, sector development and provide advice to Government. No funding was identified for ACOSS-type peaks across the wider community sector (e.g. disability, income support, child and family).',
-    reviewStateRationale: 'The named housing peak-body measure is explicit, so the partial-match call is defensible on current evidence.',
-    confidenceRationale: 'A broader community-sector peak-body package would have appeared in headline measures if it existed; scope is confirmed narrow.',
-    evidenceQualityRationale: 'Named Budget Paper No. 2 measure with a specific dollar figure and stated purpose.',
-    evidenceItems: [
-      { source: 'Budget Paper No. 2', printedPage: '72', pdfPage: '60', anchor: BUDGET_PDF + '#page=60', identifier: 'Additional Support for the Housing Services Sector — $6.2m for housing peaks', quote: '$6.2 million over three years from 2025–26 to housing and homelessness peak bodies to undertake research, sector development and provide advice to Government on improving housing security for Australians at risk of homelessness.', note: 'Partial, sector-specific response — covers housing peaks only, not the wider community-sector peaks ACOSS called for.' }
-    ]
-  },
-  {
-    id: 3,
-    overarching: 'Investing in quality community support, care and crisis services',
-    ask: 'Boost investment in public dental services to expand access to people on low incomes.',
-    askPage: '8',
-    submissionQuote: 'Boost investment in public dental services to expand access to people on low incomes.',
-    budgetImpact: '-$500 million',
-    status: 'Partially reflected',
-    reviewState: 'Review ready',
-    confidence: 'High',
-    evidenceQuality: 'Strong evidence',
-    plainIssue: 'ACOSS called for a $500m boost to public dental services. The budget extends the existing Public Dental Services for Adults funding agreement by $107.8m for one more year — about 22% of the scale sought — rather than the expansion ACOSS called for.',
-    rule: 'The budget funds $107.8m in 2025–26 to extend the Public Dental Services for Adults funding agreement to 30 June 2026. This maintains existing access rather than expanding it, and sits within a broader $132.0m Preventive Health measure.',
-    reviewStateRationale: 'Named measure with explicit dollar figure and scope allows a reviewer to confirm the partial-match call.',
-    confidenceRationale: 'Direct domain and mechanism match; the gap is a scale and scope question (extension vs expansion), not an evidence question.',
-    evidenceQualityRationale: 'Named Budget Paper No. 2 measure with full quoted text and dollar figure.',
-    evidenceItems: [
-      { source: 'Budget Paper No. 2', printedPage: '52', pdfPage: '40', anchor: BUDGET_PDF + '#page=40', identifier: 'Preventive Health, Wellbeing and Sport — $107.8m for adult public dental', quote: '$107.8 million in 2025–26 to extend the existing Public Dental Services for Adults funding agreement to 30 June 2026 to support the delivery of dental services to eligible adult dental patients.', note: 'Extends existing access for 12 months. Roughly 22% of the $500m expansion ACOSS sought.' }
-    ]
-  },
-  {
-    id: 4,
-    overarching: 'Build a social security system that meets need',
-    ask: 'Lift JobSeeker, Youth Allowance, Parenting Payment Single and related payments to parity with pension payments (at least $82 a day) and index payments to wages as well as prices.',
-    askPage: '8',
-    submissionQuote: 'Lift JobSeeker, Youth Allowance, Parenting Payment Single and related payments to parity with pension payments (at least $82 a day) and index payments to wages as well as prices.',
-    budgetImpact: '-$10 billion',
-    status: 'Not evidenced',
-    reviewState: 'Review ready',
-    confidence: 'High',
-    evidenceQuality: 'Medium evidence',
-    plainIssue: 'ACOSS called for JobSeeker and related payments to be lifted to pension parity (at least $82/day) and indexed to wages. The budget contains no base-rate increase and no change to indexation — the only related measure is a $648m reduction in receipts from raising Medicare levy low-income thresholds, which is cost-of-living relief, not a base-rate rise.',
-    rule: 'The budget does not lift the base rate of JobSeeker, Youth Allowance or Parenting Payment Single, and does not change wage indexation. The only related cost-of-living measure is the Medicare levy low-income threshold increase ($648.0m reduction in receipts over five years), which benefits low-income taxpayers but does not touch payment rates.',
-    reviewStateRationale: 'Base-rate changes always appear as named headline measures, so the absence here is a reliable signal.',
-    confidenceRationale: 'A base-rate rise of the scale ACOSS sought (~$10b impact) could not be buried in portfolio detail; its absence from BP2 is conclusive.',
-    evidenceQualityRationale: 'Full Budget Paper No. 2 reviewed; no base-rate or indexation measure found in any portfolio.',
-    evidenceItems: [
-      { source: 'Budget Paper No. 2', printedPage: '5', pdfPage: '17', anchor: BUDGET_PDF + '#page=17', identifier: 'Personal Income Tax — Medicare levy low-income thresholds ($648m over 5 years)', quote: 'The Government will increase the Medicare levy low-income thresholds for singles, families, and seniors and pensioners from 1 July 2024... The threshold for singles will be increased from $26,000 to $27,222.', note: 'This is the only income-support-adjacent measure. It helps low-income taxpayers but does not raise any base payment rate.' }
-    ]
-  },
-  {
-    id: 5,
-    overarching: 'Build a social security system that meets need',
-    ask: 'Establish supplementary payments that are adequate to cover additional costs faced by some people, including a disability and single parenthood supplement.',
-    askPage: '8',
-    submissionQuote: 'Establish supplementary payments that are adequate to cover additional costs faced by some people, including a disability and single parenthood supplement.',
-    budgetImpact: 'Not available',
-    status: 'Not evidenced',
-    reviewState: 'Needs more checking',
-    confidence: 'Low',
-    evidenceQuality: 'Weak evidence',
-    plainIssue: 'ACOSS called for new supplementary payments including a disability supplement and a single parenthood supplement to cover additional living costs. No new supplement of either kind appears in Budget Paper No. 2.',
-    rule: 'No new disability supplement, single parenthood supplement, or comparable add-on payment is named anywhere in Budget Paper No. 2. Existing disability funding is directed to the NDIS and ILC program, not to a new supplement on top of income support.',
-    reviewStateRationale: 'A new supplementary payment would be announced as a headline measure; its absence from BP2 is a reliable signal.',
-    confidenceRationale: 'New add-on payments cannot be introduced quietly in portfolio detail — they require legislation and a headline announcement.',
-    evidenceQualityRationale: 'Full BP2 Social Services and Disability sections reviewed; no supplementary payment measure found.',
-    evidenceItems: [
-      { source: 'Budget Paper No. 2', printedPage: '73', pdfPage: '61', anchor: BUDGET_PDF + '#page=61', identifier: 'Support for People with Disability — $423.8m over 5 years (no new supplement)', quote: '$364.5 million over five years from 2024–25 to redesign the Information, Linkages and Capacity Building program to provide general supports for people with disability and their families.', note: 'The only disability-cohort measure in BP2. Directed to service redesign, not a new supplementary payment.' }
-    ]
-  },
-  {
-    id: 6,
-    overarching: 'Build a social security system that meets need',
-    ask: 'Increase and index Remote Area Allowance so that it better reflects living costs in remote communities.',
-    askPage: '9',
-    submissionQuote: 'Increase and index Remote Area Allowance so that it better reflects living costs in remote communities.',
-    budgetImpact: '-$30 million',
-    status: 'Not evidenced',
-    reviewState: 'Needs more checking',
-    confidence: 'Low',
-    evidenceQuality: 'Weak evidence',
-    plainIssue: 'ACOSS called for the Remote Area Allowance rate to be increased and indexed. No RAA rate change, indexation change, or redesign is named in Budget Paper No. 2.',
-    rule: 'No Remote Area Allowance measure of any kind appears in Budget Paper No. 2. The closest adjacent funding is within the Closing the Gap package ($50m over 4 years for remote store food security), which addresses remote cost pressures but is not a social-security payment change.',
-    reviewStateRationale: 'RAA rate changes are legislated adjustments that would appear as headline measures; absence is a reliable signal.',
-    confidenceRationale: 'Changes to social-security allowance rates are never buried in portfolio detail.',
-    evidenceQualityRationale: 'Full BP2 reviewed; no RAA-specific measure found in any portfolio.',
-    evidenceItems: [
-      { source: 'Budget Paper No. 2', printedPage: '28', pdfPage: '16', anchor: BUDGET_PDF + '#page=16', identifier: 'Closing the Gap — $50m for remote food security (adjacent, not RAA)', quote: '$50.0 million over four years from 2025–26 to provide access to low-cost products for remote stores, ease cost-of-living pressures and improve food security in remote communities.', note: 'Adjacent remote cost-of-living measure but cohort-specific (First Nations) and not a payment-rate change.' }
-    ]
-  },
-  {
-    id: 7,
-    overarching: 'Employment opportunities for all, with no one left behind',
-    ask: 'Commit to full employment and full employment targets incorporating unemployment, under-employment, and a ratio of job vacancies to people unemployed.',
-    askPage: '9',
-    submissionQuote: 'Commit to full employment and full employment targets incorporating unemployment, under-employment, and a ratio of job vacancies to people unemployed.',
-    budgetImpact: 'Not applicable',
-    status: 'Not evidenced',
-    reviewState: 'Needs more checking',
-    confidence: 'Low',
-    evidenceQuality: 'Weak evidence',
-    plainIssue: 'ACOSS called for a formal full-employment commitment with targets covering unemployment, underemployment, and a job vacancies-to-unemployed ratio. No such target appears in Budget Paper No. 2.',
-    rule: 'No formal full-employment target, underemployment target, or vacancy-to-unemployment ratio appears in Budget Paper No. 2. Labour-market policy in this budget sits in the Employment and Workplace Relations portfolio without a target framework attached.',
-    reviewStateRationale: 'Formal targets may sit in strategy documents (e.g. Employment White Paper follow-ups) rather than the budget; confirming absence outside BP2 requires further checking.',
-    confidenceRationale: 'Policy targets are often announced outside the budget, so BP2 absence alone does not rule out a commitment elsewhere.',
-    evidenceQualityRationale: 'BP2 Employment portfolio reviewed; no target-framework measure captured.',
-    evidenceItems: [
-      { source: 'Budget Paper No. 2', printedPage: '40', pdfPage: '28', anchor: BUDGET_PDF + '#page=28', identifier: 'Employment and Workplace Relations portfolio — no target framework', quote: 'Employment and Workplace Relations', note: 'Section marker. No named measure in BP2 establishes a formal full-employment target or ratio.' }
-    ]
-  },
-  {
-    id: 8,
-    overarching: 'Employment opportunities for all, with no one left behind',
-    ask: 'Introduce a flexible Jobs and Training Offer for people unemployed long term, comprising a menu of subsidised temporary employment, substantial further education or training, and/or health and social supports to improve their employment prospects.',
-    askPage: '9',
-    submissionQuote: 'Introduce a flexible Jobs and Training Offer for people unemployed long term, comprising a menu of subsidised temporary employment, substantial further education or training, and/or health and social supports to improve their employment prospects.',
-    budgetImpact: '-$500 million',
-    status: 'Not evidenced',
-    reviewState: 'Needs more checking',
-    confidence: 'Low',
-    evidenceQuality: 'Weak evidence',
-    plainIssue: 'ACOSS called for a flexible Jobs and Training Offer for long-term unemployed people, combining subsidised temporary employment, substantial training, and health and social supports. No such programme appears in Budget Paper No. 2.',
-    rule: 'No Jobs and Training Offer, subsidised employment programme, or equivalent long-term-unemployed package is named in Budget Paper No. 2. No replacement for Workforce Australia that matches the flexible menu ACOSS sought was identified.',
-    reviewStateRationale: 'A new employment programme at the scale ACOSS sought (~$500m) would appear as a named headline measure.',
-    confidenceRationale: 'Employment programme redesigns are not typically buried in portfolio detail.',
-    evidenceQualityRationale: 'BP2 Employment portfolio reviewed; no named programme of this type captured.',
-    evidenceItems: [
-      { source: 'Budget Paper No. 2', printedPage: '40', pdfPage: '28', anchor: BUDGET_PDF + '#page=28', identifier: 'Employment and Workplace Relations portfolio — no Jobs and Training Offer', quote: 'Employment and Workplace Relations', note: 'No named measure matches the flexible Jobs and Training Offer ACOSS called for.' }
-    ]
-  },
-  {
-    id: 9,
-    overarching: 'Employment opportunities for all, with no one left behind',
-    ask: 'Introduce as a matter of urgency a new system informed by a human rights framework and natural justice principles to replace the automated payment suspension system.',
-    askPage: '9',
-    submissionQuote: 'Introduce as a matter of urgency a new system informed by a human rights framework and natural justice principles to replace the automated payment suspension system.',
-    budgetImpact: '-$60 million',
-    status: 'Not evidenced',
-    reviewState: 'Needs more checking',
-    confidence: 'Low',
-    evidenceQuality: 'Weak evidence',
-    plainIssue: 'ACOSS called urgently for a new system informed by human rights and natural justice principles to replace the automated payment suspension system. No such reform appears in Budget Paper No. 2.',
-    rule: 'No replacement for the automated payment suspension system, and no human-rights or natural-justice framework for compliance, is named in Budget Paper No. 2. No funding for a Centrelink compliance redesign was identified.',
-    reviewStateRationale: 'Administrative-rule reforms often sit in Services Australia portfolio statements or legislative reform rather than the budget itself.',
-    confidenceRationale: 'A structural compliance reform at the scale ACOSS sought (~$60m) could sit in portfolio or legislative material not yet reviewed.',
-    evidenceQualityRationale: 'BP2 reviewed; Services Australia PBS and legislative trackers not yet checked for compliance-system redesign.',
-    evidenceItems: [
-      { source: 'Portfolio Budget Statements', printedPage: 'Services Australia PBS', pdfPage: '', anchor: PBS_INDEX, identifier: 'Services Australia PBS — not yet reviewed for compliance reform', quote: 'The Portfolio Budget Statements inform Members of Parliament and the public of the proposed allocation of resources to government outcomes.', note: 'A Centrelink compliance-system redesign would most likely appear here. Further checking required before calling this conclusively.' }
-    ]
-  },
-  {
-    id: 10,
-    overarching: 'Make housing affordable for people with low incomes',
-    ask: 'Empower and resource the development of a First Nations-led housing and homelessness plan.',
-    askPage: '9',
-    submissionQuote: 'Empower and resource the development of a First Nations-led housing and homelessness plan.',
-    budgetImpact: '-$1 billion',
-    status: 'Partially reflected',
-    reviewState: 'Review ready',
-    confidence: 'Medium',
-    evidenceQuality: 'Medium evidence',
-    plainIssue: 'ACOSS called for $1b to empower and resource a First Nations-led housing and homelessness plan. The budget funds $70.9m over two years for First Nations home ownership via Indigenous Business Australia — about 7% of the scale sought, and focused on home ownership rather than a community-led plan.',
-    rule: 'The budget funds $70.9m over two years from 2025–26 to boost Indigenous Business Australia’s Home Loan Capital Fund, targeting single-carer First Nations families to buy their own home. This is a home-ownership capital measure within the $506.4m Closing the Gap package, not a First Nations-led housing and homelessness plan of the kind ACOSS called for.',
-    reviewStateRationale: 'Named measure with dollar figure and mechanism is clear enough for a reviewer to confirm the partial-match call.',
-    confidenceRationale: 'Mechanism is materially different (home-ownership finance, not a sector-led strategy), so the “partial” call sits between Adjacent and Partially reflected.',
-    evidenceQualityRationale: 'Named Budget Paper No. 2 measure with full quoted scope.',
-    evidenceItems: [
-      { source: 'Budget Paper No. 2', printedPage: '28', pdfPage: '16', anchor: BUDGET_PDF + '#page=16', identifier: 'Closing the Gap — $70.9m for IBA Home Loan Capital Fund', quote: '$70.9 million over two years from 2025–26 to increase opportunities for First Nations people, and particularly single carer families, to buy their own home and build intergenerational wealth through a boost to Indigenous Business Australia’s Home Loan Capital Fund.', note: 'Home-ownership finance for First Nations families. Not a First Nations-led homelessness and housing plan.' }
-    ]
-  },
-  {
-    id: 11,
-    overarching: 'Make housing affordable for people with low incomes',
-    ask: 'Substantially boost social housing investment through a 10-year funding pipeline calibrated to meet unmet social housing need.',
-    askPage: '9',
-    submissionQuote: 'Substantially boost social housing investment through a 10-year funding pipeline calibrated to meet unmet social housing need.',
-    budgetImpact: 'Not available',
-    status: 'Partially reflected',
-    reviewState: 'Review ready',
-    confidence: 'High',
-    evidenceQuality: 'Strong evidence',
-    plainIssue: 'ACOSS called for a 10-year social housing funding pipeline calibrated to meet unmet need. The budget funds two adjacent housing measures — a $0.8b expansion of the Help to Buy home-ownership program and a $16b increase in the Housing Australia liability guarantee — but not a direct social-housing capital pipeline of the kind sought.',
-    rule: 'The budget funds: (1) $0.8b additional equity in the Help to Buy program (total $6.3b), raising property and income caps, within the $58.8m Housing Support measure; (2) a $16b lift in the Commonwealth guarantee of Housing Australia’s liabilities (from $10b to $26b) to support Housing Australia Future Fund and National Housing Accord projects, within a $219.2m Treasury resourcing measure. These support supply-side capacity but are not a 10-year social-housing funding pipeline.',
-    reviewStateRationale: 'Two named measures with explicit dollar figures give a reviewer a clear base for the partial-match call.',
-    confidenceRationale: 'Mechanism gap is clear: these are shared-equity and guarantee instruments, not direct social-housing capital.',
-    evidenceQualityRationale: 'Two named Budget Paper No. 2 measures with full quoted scope and dollar figures.',
-    evidenceItems: [
-      { source: 'Budget Paper No. 2', printedPage: '75', pdfPage: '63', anchor: BUDGET_PDF + '#page=63', identifier: 'Housing Support — $0.8b Help to Buy expansion', quote: '$0.8 billion in additional investment in the Help to Buy program, bringing total equity investments to $6.3 billion, through increasing property price caps and increasing income caps.', note: 'Shared-equity home-ownership expansion, not social housing capital.' },
-      { source: 'Budget Paper No. 2', printedPage: '78', pdfPage: '66', anchor: BUDGET_PDF + '#page=66', identifier: 'Treasury Portfolio — $16b Housing Australia guarantee increase', quote: 'An increase in the cap on the Commonwealth’s guarantee of Housing Australia’s liabilities from $10 billion to $26 billion including support for commitments for projects under the Housing Australia Future Fund and the National Housing Accord Facility.', note: 'Lifts Housing Australia’s borrowing headroom; enables but does not directly fund a 10-year pipeline.' }
-    ]
-  },
-  {
-    id: 12,
-    overarching: 'A fairer tax system that supports services, safety nets and economic development',
-    ask: 'Broaden the income definition for the Medicare Levy to prevent people sheltering their income from the levy.',
-    askPage: '10',
-    submissionQuote: 'Strengthen the Medicare Levy.',
-    budgetImpact: 'Not available',
-    status: 'Adjacent / indirect',
-    reviewState: 'Review ready',
-    confidence: 'High',
-    evidenceQuality: 'Strong evidence',
-    plainIssue: 'ACOSS called for the Medicare levy income definition to be broadened so higher earners could not shelter income from the levy. The budget moves in the opposite direction: it raises the low-income thresholds ($648m reduction in receipts over 5 years), which protects low-income households but does not broaden the levy base.',
-    rule: 'The budget funds a Personal Income Tax change raising Medicare levy low-income thresholds (single threshold from $26,000 to $27,222), with a $648.0m reduction in receipts over five years. This strengthens fairness for low-income households but does not broaden the income definition to prevent high-income sheltering — the specific mechanism ACOSS asked for.',
-    reviewStateRationale: 'Named measure with full text and dollar figure; a reviewer can verify the direction and mechanism immediately.',
-    confidenceRationale: 'Clear and well-documented measure; the status reflects that the mechanism partially overlaps with the ask but does not deliver the broadened income definition.',
-    evidenceQualityRationale: 'Named Budget Paper No. 2 measure with full quoted commitment, dollar figure, and printed and PDF pages cited.',
-    evidenceItems: [
-      { source: 'Budget Paper No. 2', printedPage: '5', pdfPage: '17', anchor: BUDGET_PDF + '#page=17', identifier: 'Personal Income Tax — Medicare levy low-income thresholds ($648m over 5 years)', quote: 'The Government will increase the Medicare levy low-income thresholds for singles, families, and seniors and pensioners from 1 July 2024... The threshold for singles will be increased from $26,000 to $27,222.', note: 'Strengthens fairness for low-income earners but does not broaden the levy base at the top, which is what ACOSS sought.' }
-    ]
-  }
-];
 
 // ============================================================================
 // Filter state + helpers
@@ -572,22 +324,8 @@ function pageGroupFor(p) {
   if (n <= 30) return 'Pages 21–30';
   return 'Pages 31+';
 }
-// Map old status vocabulary to new verdict vocabulary (for the hand-curated sample rows).
-function migrateSampleToVerdict(row) {
-  if (row.verdict) return row;
-  const s = row.status;
-  if (s === 'Directly funded') row.verdict = 'Directly reflected';
-  else if (s === 'Partially reflected') row.verdict = 'Partially reflected';
-  else if (s === 'Adjacent / indirect') row.verdict = 'Adjacent';
-  else if (s === 'Not evidenced') row.verdict = 'Not reflected';
-  else row.verdict = 'Not reflected';
-  return row;
-}
-ACOSS_SAMPLE_ROWS.forEach(migrateSampleToVerdict);
-
-let rows = ACOSS_SAMPLE_ROWS.slice();
+let rows = [];
 function recomputePageGroups() { rows.forEach(r => { r.pageGroup = pageGroupFor(r.askPage); }); }
-recomputePageGroups();
 
 function verdictClass(v) {
   if (v === 'Directly reflected') return 'status-direct';
@@ -640,6 +378,19 @@ function filteredRows() {
 // Render
 // ============================================================================
 function render() {
+  const toolbar = document.getElementById('registerToolbar');
+  const tableWrap = document.getElementById('registerTableWrap');
+
+  // Empty-state: no submission uploaded yet. Hide the register entirely so
+  // the landing view is just the four-step stack.
+  if (!rows.length) {
+    toolbar.style.display = 'none';
+    tableWrap.style.display = 'none';
+    return;
+  }
+
+  toolbar.style.display = '';
+  tableWrap.style.display = '';
   populateHeaderFilters();
   const data = filteredRows();
   const body = document.getElementById('tableBody');
@@ -1056,7 +807,7 @@ document.getElementById('pdfUpload').addEventListener('change', async (e) => {
     const extracted = await extractAsksFromPages(pages, (msg) => setUploadStatus(msg, 'working'));
     const newRows = rowsFromExtraction(extracted);
     if (!newRows.length) {
-      setUploadStatus('No recommendations found in this PDF. Check the document, or reset to the ACOSS sample.', 'error');
+      setUploadStatus('No recommendations found in this PDF. Check the document — it should contain clearly numbered or listed asks (e.g. "Recommendation 1", "We recommend…", "The Government should…").', 'error');
       return;
     }
     rows = newRows;
@@ -1075,19 +826,6 @@ document.getElementById('pdfUpload').addEventListener('change', async (e) => {
   } finally {
     e.target.value = '';
   }
-});
-
-document.getElementById('resetToAcossBtn').addEventListener('click', () => {
-  rows = ACOSS_SAMPLE_ROWS.slice();
-  recomputePageGroups();
-  state.filters = { overarching:'All', ask:'All', verdict:'All', pageGroup:'All' };
-  state.search = '';
-  state.selectedId = null;
-  document.getElementById('searchBox').value = '';
-  render();
-  setUploadStatus('Showing ACOSS 2025-26 pre-budget submission (sample data).', '');
-  updateEvaluateButtonState();
-  if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
 });
 
 // ============================================================================
