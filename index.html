@@ -2346,12 +2346,8 @@ function renderVerdictTiles() {
   const host = document.getElementById('verdictTiles');
   if (!host) return;
   const anyEvaluated = rows.some(r => r.verdict && r.verdict !== 'Not yet evaluated');
-  // Toggle the sign-up dock in lock-step with the tiles' visibility.
-  const dock = document.getElementById('signupDock');
-  if (dock) {
-    dock.hidden = !anyEvaluated;
-    if (!anyEvaluated) dock.classList.remove('is-open');
-  }
+  // Sign-up dock is visible whenever the tool screen is active (handled on
+  // welcome→tool transition). Tiles show only after evaluation starts.
   if (!anyEvaluated) { host.classList.remove('is-visible'); host.innerHTML = ''; return; }
   const counts = Object.fromEntries(VERDICTS.map(v => [v, 0]));
   rows.forEach(r => { if (counts[r.verdict] !== undefined) counts[r.verdict]++; });
@@ -2689,17 +2685,23 @@ const WORKER_BASE = GEMINI_ENDPOINT.replace(/\/+$/, '');
   const slug = (params.get('c') || '').trim();
   const screen = document.getElementById('welcomeScreen');
   if (!screen) return;
+  const dock = document.getElementById('signupDock');
   if (!slug) {
     document.documentElement.classList.remove('has-preset','welcome-active');
-    return; // No preset → no welcome screen, go straight to the tool
+    // No welcome screen → reveal the sign-up dock immediately.
+    if (dock) dock.hidden = false;
+    return;
   }
   screen.classList.add('is-visible');
   document.documentElement.classList.add('welcome-active');
+  // Hide the dock while the welcome screen is up, then reveal on Ready.
+  if (dock) dock.hidden = true;
   const btn = document.getElementById('welcomeReadyBtn');
   if (btn) {
     btn.addEventListener('click', () => {
       screen.classList.add('is-leaving');
       document.documentElement.classList.remove('welcome-active');
+      if (dock) dock.hidden = false;
       setTimeout(() => {
         screen.classList.remove('is-visible','is-leaving');
       }, 350);
