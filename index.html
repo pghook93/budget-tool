@@ -422,6 +422,19 @@
 </head>
 <body>
 <canvas id="starfield" aria-hidden="true"></canvas>
+
+<!-- Focus-brief modal (must be in the DOM before main scripts query it). -->
+<div class="modal-backdrop" id="focusModal" role="dialog" aria-modal="true" aria-labelledby="focusModalTitle">
+  <div class="modal" role="document">
+    <h2 id="focusModalTitle">Add your focus brief</h2>
+    <p class="lede">A short paragraph or bullet list of your organisation's strategic priorities, focus populations and policy areas. Used to surface unasked measures and risks relevant to you.</p>
+    <textarea id="focusBrief" placeholder="e.g. JSS focuses on men's behaviour change, Aboriginal justice, youth justice, homelessness, economic participation, and climate justice."></textarea>
+    <div class="modal-actions">
+      <button type="button" class="btn" id="focusModalCancel">Cancel</button>
+      <button type="button" class="btn primary" id="focusModalSave">Save focus brief</button>
+    </div>
+  </div>
+</div>
 <div class="shell">
 
   <section class="card card-pad">
@@ -2607,18 +2620,5 @@ hydrateFromPreset();
   else { requestAnimationFrame(loop); }
 })();
 </script>
-
-<!-- Focus-brief modal. Textarea is the same #focusBrief element other code queries. -->
-<div class="modal-backdrop" id="focusModal" role="dialog" aria-modal="true" aria-labelledby="focusModalTitle">
-  <div class="modal" role="document">
-    <h2 id="focusModalTitle">Add your focus brief</h2>
-    <p class="lede">A short paragraph or bullet list of your organisation's strategic priorities, focus populations and policy areas. Used to surface unasked measures and risks relevant to you.</p>
-    <textarea id="focusBrief" placeholder="e.g. JSS focuses on men's behaviour change, Aboriginal justice, youth justice, homelessness, economic participation, and climate justice."></textarea>
-    <div class="modal-actions">
-      <button type="button" class="btn" id="focusModalCancel">Cancel</button>
-      <button type="button" class="btn primary" id="focusModalSave">Save focus brief</button>
-    </div>
-  </div>
-</div>
 </body>
 </html>
