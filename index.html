@@ -4,43 +4,99 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>ACOSS Ask Register — Budget Alignment</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
   :root{
-    /* Night-sky palette. Background is a deep navy (not pitch black so white
-       text doesn't vibrate), surfaces are a hair lighter so cards lift off the
-       page. Accent is a warm harvest-moon gold for CTAs and the "current" step
-       marker — complementary to the cool navy and visually distinctive without
-       competing with the status colours in the register. */
-    --bg:#0b1220; --surface:#131c2e; --surface-2:#1b2540; --surface-3:#0f1728;
-    --border:#2a365a; --border-soft:#212c4a; --divider:#212c4a;
-    --text:#eaeefb; --text-muted:#9aa6c8; --text-faint:#6d7899; --text-inverse:#0b1220;
-    --primary:#e8b94b; --primary-soft:#d4a73c; --primary-tint:rgba(232,185,75,.14);
-    --accent:#7fb7f5; /* soft sky-blue for links and secondary cues */
-    --success:#7ed08b; --warning:#f0a868; --blue:#7fb7f5; --error:#ff8a9b;
+    /* MCS night-sky palette. Base gradient #2f3746 → #262d3b matches the
+       Strategic-Qualifying-Tool dashboard. No yellow anywhere — the "current"
+       and CTA accent is frosted white with a subtle glow. */
+    --bg:#262d3b; --bg-top:#2f3746;
+    --surface:hsla(0,0%,100%,0.05);
+    --surface-2:hsla(0,0%,100%,0.08);
+    --surface-3:hsla(0,0%,100%,0.03);
+    --surface-solid:#2b3242;
+    --border:hsla(0,0%,100%,0.12);
+    --border-soft:hsla(0,0%,100%,0.08);
+    --divider:hsla(0,0%,100%,0.08);
+    --text:hsl(220,10%,96%);
+    --text-strong:#ffffff;
+    --text-muted:hsl(220,10%,75%);
+    --text-faint:hsl(220,10%,55%);
+    --text-inverse:#1a1f2b;
+    /* Frosted-white accent with subtle glow — replaces gold */
+    --primary:hsl(220,15%,96%);
+    --primary-soft:hsl(220,15%,88%);
+    --primary-tint:hsla(0,0%,100%,0.10);
+    --primary-glow:0 0 0 1px hsla(0,0%,100%,0.35), 0 0 18px hsla(0,0%,100%,0.18);
+    /* Cool MCS blue kept as secondary link accent */
+    --accent:hsl(215,60%,65%);
+    --accent-strong:hsl(215,60%,55%);
+    --success:hsl(145,55%,60%);
+    --warning:hsl(38,90%,65%);
+    --blue:hsl(215,60%,70%);
+    --error:hsl(0,70%,68%);
     --radius-sm:8px; --radius-md:12px; --radius-xl:20px;
     --shadow-sm:0 1px 2px rgba(0,0,0,.4), 0 1px 6px rgba(0,0,0,.25);
     --shadow-md:0 10px 30px rgba(0,0,0,.5);
     --space-2:.5rem; --space-3:.75rem; --space-4:1rem; --space-5:1.25rem; --space-6:1.5rem;
     --text-2xs:.6875rem; --text-xs:.75rem; --text-sm:.875rem; --text-base:1rem;
     --text-lg:1.125rem; --text-xl:1.375rem; --text-2xl:1.75rem;
-    --text-hero:clamp(2.25rem, 5vw, 3.25rem);
+    --text-hero:clamp(2.5rem, 5.5vw, 3.5rem);
   }
   *{box-sizing:border-box}
-  html,body{margin:0;padding:0;background:var(--bg);color:var(--text);
-    font-family:'Inter','Helvetica Neue',Arial,sans-serif;font-size:16px;line-height:1.55;
+  html,body{margin:0;padding:0;color:var(--text);
+    font-family:'Plus Jakarta Sans','Inter','Helvetica Neue',Arial,sans-serif;
+    font-size:16px;line-height:1.55;font-weight:400;
     -webkit-font-smoothing:antialiased;-moz-osx-font-smoothing:grayscale;
-    font-feature-settings:'ss01','cv11';
-    /* A very subtle radial glow so the navy doesn't read as flat black. */
-    background-image:radial-gradient(1200px 600px at 50% -200px, rgba(232,185,75,.08), transparent 60%),
-                     radial-gradient(800px 400px at 90% 120%, rgba(127,183,245,.06), transparent 60%);
-    background-attachment:fixed}
-  .shell{max-width:1400px;margin:0 auto;padding:2.25rem clamp(1rem,3vw,2rem)}
+    background:linear-gradient(160deg, var(--bg-top), var(--bg));
+    background-attachment:fixed;min-height:100vh}
+  /* Subtle animated starfield — two layers drifting at different speeds.
+     Kept restrained: low-opacity white dots, slow movement, zero pointer impact. */
+  body::before,body::after{content:"";position:fixed;inset:-50% -50%;
+    pointer-events:none;z-index:0;will-change:transform,opacity}
+  body::before{
+    background-image:
+      radial-gradient(1.2px 1.2px at 12% 18%, hsla(0,0%,100%,0.9), transparent 60%),
+      radial-gradient(1px 1px at 34% 72%, hsla(0,0%,100%,0.7), transparent 60%),
+      radial-gradient(1.4px 1.4px at 58% 24%, hsla(0,0%,100%,0.85), transparent 60%),
+      radial-gradient(1px 1px at 76% 64%, hsla(0,0%,100%,0.6), transparent 60%),
+      radial-gradient(1.2px 1.2px at 88% 32%, hsla(0,0%,100%,0.75), transparent 60%),
+      radial-gradient(1px 1px at 22% 52%, hsla(0,0%,100%,0.55), transparent 60%),
+      radial-gradient(1.3px 1.3px at 46% 86%, hsla(0,0%,100%,0.8), transparent 60%),
+      radial-gradient(1px 1px at 68% 12%, hsla(0,0%,100%,0.65), transparent 60%);
+    background-repeat:repeat;background-size:600px 600px;
+    animation:star-twinkle-a 7s ease-in-out infinite,
+              star-drift-a 180s linear infinite;
+    opacity:.55}
+  body::after{
+    background-image:
+      radial-gradient(0.9px 0.9px at 18% 38%, hsla(0,0%,100%,0.8), transparent 60%),
+      radial-gradient(0.8px 0.8px at 42% 14%, hsla(0,0%,100%,0.6), transparent 60%),
+      radial-gradient(1px 1px at 64% 58%, hsla(0,0%,100%,0.7), transparent 60%),
+      radial-gradient(0.8px 0.8px at 82% 82%, hsla(0,0%,100%,0.5), transparent 60%),
+      radial-gradient(0.9px 0.9px at 28% 78%, hsla(0,0%,100%,0.65), transparent 60%),
+      radial-gradient(1px 1px at 92% 48%, hsla(0,0%,100%,0.7), transparent 60%);
+    background-repeat:repeat;background-size:480px 480px;
+    animation:star-twinkle-b 11s ease-in-out infinite,
+              star-drift-b 260s linear infinite;
+    opacity:.35}
+  @keyframes star-twinkle-a{0%,100%{opacity:.55}50%{opacity:.28}}
+  @keyframes star-twinkle-b{0%,100%{opacity:.35}50%{opacity:.18}}
+  @keyframes star-drift-a{from{transform:translate3d(0,0,0)}to{transform:translate3d(-120px,80px,0)}}
+  @keyframes star-drift-b{from{transform:translate3d(0,0,0)}to{transform:translate3d(80px,-100px,0)}}
+  @media (prefers-reduced-motion: reduce){
+    body::before,body::after{animation:none}
+  }
+  .shell{max-width:1400px;margin:0 auto;padding:2.25rem clamp(1rem,3vw,2rem);
+    position:relative;z-index:1}
   h1{font-size:var(--text-2xl);margin:0 0 .35rem;font-weight:700;letter-spacing:-.02em;line-height:1.15}
-  .hero-title{font-size:var(--text-hero);font-weight:800;letter-spacing:-.035em;
-    line-height:1;margin:0 0 1.25rem;
-    background:linear-gradient(180deg, #ffffff 0%, #c8d0ea 100%);
-    -webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent;
-    color:#ffffff /* fallback */}
+  .hero-title{font-size:var(--text-hero);font-weight:700;letter-spacing:-.025em;
+    line-height:1.12;margin:0 0 1.25rem;padding:.1em 0 .05em;
+    color:#ffffff;
+    text-shadow:0 0 32px hsla(0,0%,100%,0.22), 0 0 1px hsla(0,0%,100%,0.6);
+    font-family:'Plus Jakarta Sans','Inter',sans-serif}
   .lede{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 1.5rem;max-width:70ch;line-height:1.6}
   .card{background:var(--surface);border:1px solid var(--border);
     border-radius:var(--radius-xl);box-shadow:var(--shadow-sm)}
@@ -99,10 +155,15 @@
   .search-input:focus{border-color:var(--primary)}
   .btn{min-height:40px;padding:.5rem 1rem;border:1px solid var(--border);
     background:var(--surface-2);border-radius:999px;cursor:pointer;font-size:var(--text-sm);
-    color:var(--text);font-family:inherit;font-weight:500;transition:all .15s ease}
-  .btn:hover{border-color:var(--primary);color:var(--primary)}
-  .btn.primary{background:var(--primary);color:var(--text-inverse);border-color:var(--primary);font-weight:600}
-  .btn.primary:hover{background:var(--primary-soft);border-color:var(--primary-soft);color:var(--text-inverse)}
+    color:var(--text);font-family:inherit;font-weight:500;transition:all .18s ease;
+    backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px)}
+  .btn:hover{border-color:hsla(0,0%,100%,0.4);color:var(--text-strong);
+    background:hsla(0,0%,100%,0.08)}
+  .btn.primary{background:hsla(0,0%,100%,0.95);color:var(--text-inverse);
+    border-color:hsla(0,0%,100%,0.95);font-weight:600;
+    box-shadow:0 0 0 1px hsla(0,0%,100%,0.15), 0 0 22px hsla(0,0%,100%,0.18)}
+  .btn.primary:hover{background:#ffffff;border-color:#ffffff;color:var(--text-inverse);
+    box-shadow:0 0 0 1px hsla(0,0%,100%,0.25), 0 0 28px hsla(0,0%,100%,0.28)}
   .btn.primary:disabled,.btn:disabled{opacity:.45;cursor:not-allowed}
   .count-note{color:var(--text-muted);font-size:var(--text-sm);margin-right:auto}
 
@@ -235,18 +296,19 @@
   .stepper-body{font-size:var(--text-sm);color:var(--text);min-height:2.6rem}
   .stepper-action{margin-top:.65rem;display:flex;flex-wrap:wrap;gap:.5rem;align-items:center}
   /* DONE — soft green tint, filled green marker with tick */
-  .stepper-node.is-done{background:rgba(126,208,139,.08)}
+  .stepper-node.is-done{background:hsla(145,55%,60%,.08)}
   .stepper-node.is-done .stepper-head span:not(.stepper-num):not(.stepper-tag){color:var(--success)}
-  .stepper-node.is-done .stepper-num{background:var(--success);border-color:var(--success);color:#0b1220}
+  .stepper-node.is-done .stepper-num{background:var(--success);border-color:var(--success);color:#1a1f2b}
   .stepper-node.is-done .stepper-num::after{content:"✓";font-size:.8rem;font-weight:800}
   .stepper-node.is-done .stepper-num > span{display:none}
 
-  /* CURRENT — gold moonlight tint + filled gold marker */
+  /* CURRENT — frosted-white glow marker, no yellow */
   .stepper-node.is-current{background:var(--primary-tint);
-    box-shadow:inset 0 0 0 1px rgba(232,185,75,.35)}
-  .stepper-node.is-current .stepper-head span:not(.stepper-num):not(.stepper-tag){color:var(--primary)}
-  .stepper-node.is-current .stepper-num{background:var(--primary);border-color:var(--primary);
-    color:#0b1220;font-weight:700;box-shadow:0 0 0 4px rgba(232,185,75,.15)}
+    box-shadow:inset 0 0 0 1px hsla(0,0%,100%,0.28)}
+  .stepper-node.is-current .stepper-head span:not(.stepper-num):not(.stepper-tag){color:var(--text-strong)}
+  .stepper-node.is-current .stepper-num{background:hsla(0,0%,100%,0.95);border-color:hsla(0,0%,100%,0.95);
+    color:#1a1f2b;font-weight:700;
+    box-shadow:0 0 0 4px hsla(0,0%,100%,0.12), 0 0 14px hsla(0,0%,100%,0.35)}
 
   /* LOCKED — dim, no action, clearly inactive */
   .stepper-node.is-locked{background:var(--surface);opacity:.6}
@@ -260,15 +322,15 @@
     border-radius:999px;font-size:var(--text-2xs);font-weight:700;
     letter-spacing:.06em;text-transform:uppercase;background:var(--surface-2);
     border:1px solid var(--border);color:var(--text-muted);margin-left:auto}
-  .stepper-node.rehearsal .stepper-tag{color:var(--primary);border-color:var(--primary);
+  .stepper-node.rehearsal .stepper-tag{color:var(--text-strong);border-color:hsla(0,0%,100%,0.35);
     background:var(--primary-tint)}
   .stepper-node.live .stepper-tag{color:var(--accent);border-color:var(--accent);
-    background:rgba(127,183,245,.12)}
+    background:hsla(215,60%,65%,.12)}
   .stepper-sub{font-size:var(--text-xs);color:var(--text-muted);margin:.2rem 0 0}
   .stepper-error{color:var(--error);font-weight:600}
-  .stepper-link{background:none;border:0;color:var(--primary);padding:0;
+  .stepper-link{background:none;border:0;color:var(--accent);padding:0;
     font:inherit;text-decoration:underline;cursor:pointer;font-size:var(--text-xs)}
-  .stepper-link:hover{color:var(--primary-soft);text-decoration:none}
+  .stepper-link:hover{color:var(--accent-strong);text-decoration:none}
   @media (max-width: 720px){
     .stepper{grid-template-columns:1fr}
     .stepper-node{border-right:0;border-bottom:1px solid var(--border)}
