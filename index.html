@@ -2133,6 +2133,25 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   showEvalProgress('start');
   evalAbortController = new AbortController();
   const signal = evalAbortController.signal;
+
+  // Kick off insights in parallel with the ask-by-ask evaluation. Insights only
+  // need budget docs + strategic focus (not the eval verdicts), so running them
+  // concurrently shaves ~3-5 min off total wall-clock time. If any usable
+  // context exists, fire the insights click handler now; it has its own abort
+  // controller and won't interfere with eval.
+  try {
+    const brief = (document.getElementById('focusBrief').value || '').trim();
+    const hasContext = !!brief || !!strategicPlan || rows.length > 0;
+    if (hasContext) {
+      const ibtn = document.getElementById('insightsBtn');
+      if (ibtn) {
+        ibtn.disabled = false;
+        // Fire and forget — the handler is async and writes its own status
+        // into Step 4's body alongside the eval progress.
+        ibtn.click();
+      }
+    }
+  } catch (e) { console.warn('Parallel insights kickoff failed (non-fatal):', e); }
   const totalRaw = budgetDocs.reduce((n, d) => n + d.totalChars, 0);
   const totalPagesAll = budgetDocs.reduce((n, d) => n + d.pages.length, 0);
   // Decide per-ask relevance routing vs. single-corpus routing.
@@ -2237,27 +2256,20 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   }
   evalAbortController = null;
 
-  // Merged flow: after evaluation, automatically kick off the insights pass so
-  // the user doesn't need a second click. Fires whenever we have any usable
-  // context — focus brief, strategic plan, OR the asks register itself (which
-  // lets the AI surface budget measures outside the submission's scope).
-  // The insights button stays hidden in the UI; its click handler does the work.
-  if (!signal.aborted) {
+  // Insights were kicked off in parallel at the start of this handler — they
+  // may finish before, during, or after the ask evaluation. No post-hoc
+  // trigger needed here.
+  //
+  // Safety net: if for any reason the parallel kickoff didn't fire (e.g. no
+  // context at click time but asks exist now) and insights haven't started,
+  // fire them now. Guarded on insightsAbortController being null.
+  if (!signal.aborted && !insightsAbortController) {
     const brief = (document.getElementById('focusBrief').value || '').trim();
     const hasContext = !!brief || !!strategicPlan || rows.length > 0;
-    console.log('[insights auto-trigger]', { hasContext, hasBrief: !!brief, hasPlan: !!strategicPlan, rowsLen: rows.length, budgetDocs: budgetDocs.length });
     if (hasContext && budgetDocs.length) {
-      // Ensure the button's disabled state reflects current context before we
-      // try to click it — guards against a stale disabled flag from earlier.
       if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
       const ibtn = document.getElementById('insightsBtn');
-      console.log('[insights auto-trigger] button', { found: !!ibtn, disabled: ibtn ? ibtn.disabled : 'n/a' });
-      if (ibtn) {
-        // Force-enable and click. The click handler re-validates inputs, so if
-        // anything is genuinely missing it'll still bail safely with a status.
-        ibtn.disabled = false;
-        ibtn.click();
-      }
+      if (ibtn) { ibtn.disabled = false; ibtn.click(); }
     }
   }
 });
