@@ -2664,17 +2664,17 @@ function renderInsights(data) {
   function cardHtml(item, kind) {
     const tags = [];
     if (item.priorityArea) tags.push(`<span class="insight-tag">${escapeHtml(item.priorityArea)}</span>`);
+    const metaBits = [];
+    if (item.source) metaBits.push(escapeHtml(item.source));
+    if (item.pdfPage) metaBits.push(`PDF page ${escapeHtml(item.pdfPage)}`);
     return `
       <article class="insight-card ${kind === 'risk' ? 'risk' : ''}">
         <div class="insight-title">${escapeHtml(item.title || 'Untitled measure')}${item.amount ? ' — ' + escapeHtml(item.amount) : ''}</div>
-        <div class="meta-row">
-          ${item.source ? `<span>${escapeHtml(item.source)}</span>` : ''}
-          ${item.pdfPage ? `<span>PDF page ${escapeHtml(item.pdfPage)}</span>` : ''}
-        </div>
         <div style="margin-bottom:.4rem">${tags.join('')}</div>
         <p class="insight-summary">${escapeHtml(item.summary || '')}</p>
-        ${item.whyItMatters ? `<div class="insight-why"><strong>${kind === 'risk' ? 'Why this is a risk' : 'Why it matters to you'}</strong>${escapeHtml(item.whyItMatters)}</div>` : ''}
         ${item.quote ? `<div class="insight-quote">“${escapeHtml(item.quote)}”</div>` : ''}
+        ${metaBits.length ? `<div class="meta-row">${metaBits.map(m => `<span>${m}</span>`).join('')}</div>` : ''}
+        ${item.whyItMatters ? `<div class="insight-why"><strong>${kind === 'risk' ? 'Why this is a risk' : 'Why it matters to you'}</strong>${escapeHtml(item.whyItMatters)}</div>` : ''}
       </article>
     `;
   }
