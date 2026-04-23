@@ -173,7 +173,7 @@
     padding:4vh 1rem 4vh;overflow-y:auto;backdrop-filter:blur(6px)}
   .modal-overlay.open{display:flex}
   .modal{background:var(--surface);border-radius:var(--radius-xl);
-    box-shadow:var(--shadow-md);width:min(960px,100%);max-width:960px;
+    box-shadow:var(--shadow-md);width:min(1280px,100%);max-width:1280px;
     animation:modalIn .18s ease-out}
   @keyframes modalIn{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}
   .modal-header{padding:1.25rem 1.5rem;border-bottom:1px solid var(--divider);
@@ -583,13 +583,14 @@
   /* Live countdown to Federal Budget — anchored top-right, understated so it
      doesn't fight the hero title. Numbers use tabular figures so the layout
      doesn't jitter as values tick. */
-  .budget-countdown{position:fixed;top:clamp(2rem,4.5vh,3rem);
-    right:clamp(2.25rem,4.5vw,3.25rem);display:flex;flex-direction:column;
+  .budget-countdown{position:fixed;top:clamp(1.25rem,3vh,2rem);
+    right:clamp(1.25rem,3vw,2rem);display:flex;flex-direction:column;
     align-items:flex-end;gap:.3rem;z-index:60;
     padding:.7rem .95rem;border-radius:var(--radius-md);
     background:hsla(222,35%,10%,0.55);border:1px solid hsla(0,0%,100%,0.10);
     backdrop-filter:blur(10px) saturate(130%);
-    -webkit-backdrop-filter:blur(10px) saturate(130%)}
+    -webkit-backdrop-filter:blur(10px) saturate(130%);
+    max-width:calc(100vw - 2rem);box-sizing:border-box}
   .budget-countdown-label{font-size:var(--text-2xs);text-transform:uppercase;
     letter-spacing:.18em;color:var(--accent);font-weight:600;line-height:1}
   .budget-countdown-timer{display:flex;gap:.55rem;align-items:flex-end;
@@ -956,7 +957,7 @@ function render() {
     body.innerHTML = data.map(r => `
       <tr data-id="${r.id}"${state.selectedId === r.id ? ' class="selected"' : ''}>
         <td class="cell-overarching">${escapeHtml(r.overarching)}</td>
-        <td class="cell-ask">${escapeHtml(r.askShort || r.ask)}</td>
+        <td class="cell-ask">${escapeHtml(getDisplayAsk(r))}</td>
         <td class="col-status-short"><span class="pill ${verdictClass(r.verdict)}">${escapeHtml(r.verdict)}</span></td>
         <td class="cell-page">${escapeHtml(r.askPage)}</td>
       </tr>
@@ -971,6 +972,18 @@ function render() {
     n === rows.length ? `${n} asks` : `${n} of ${rows.length} asks`;
 }
 
+// Returns the short/display version of an ask for the table + CSV:
+// 1. If the AI returned an askShort, use it.
+// 2. Else if the verbatim ask is > 50 words, truncate at ~40 words + "…".
+// 3. Else return the full ask.
+function getDisplayAsk(row) {
+  if (row.askShort) return row.askShort;
+  if (!row.ask) return '';
+  const words = row.ask.trim().split(/\s+/);
+  if (words.length <= 50) return row.ask;
+  return words.slice(0, 40).join(' ') + '…';
+}
+
 // ============================================================================
 // Modal
 // ============================================================================
@@ -979,18 +992,26 @@ function openModal(id) {
   if (!row) return;
   state.selectedId = id;
 
-  document.getElementById('modalEyebrow').textContent = row.overarching;
-  // Modal title uses the short version when present (matches the table);
-  // the full verbatim ask is shown below in its own detail box so users can
-  // read the original wording without losing any detail.
-  document.getElementById('modalTitle').textContent = row.askShort || row.ask;
+  // Modal title is now the section heading (short, scannable). The ask text
+  // lives in the body, where long asks don't dominate the header visually.
+  document.getElementById('modalEyebrow').textContent = `Ask ${row.id}`;
+  document.getElementById('modalTitle').textContent = row.overarching || 'Recommendation';
   document.getElementById('modalPills').innerHTML = '';
 
+  const displayAsk = getDisplayAsk(row);
+  const displayDiffersFromFull = displayAsk !== row.ask && !!row.ask;
+
   const bodyHtml = [
-    ...(row.askShort ? [`<div class="detail-box">
-      <strong>Full recommendation (verbatim)</strong>
-      <p>${escapeHtml(row.ask)}</p>
-    </div>`] : []),
+    // The ask itself, in body text. If it was truncated for the table, offer
+    // an expander for the full verbatim wording.
+    `<div class="detail-box">
+      <strong>Recommendation</strong>
+      <p>${escapeHtml(displayAsk)}</p>
+      ${displayDiffersFromFull ? `<details style="margin-top:.55rem">
+        <summary style="cursor:pointer;user-select:none;color:var(--text-muted);font-size:var(--text-xs)">Show full recommendation (verbatim)</summary>
+        <p style="margin:.5rem 0 0;line-height:1.55;font-size:var(--text-sm)">${escapeHtml(row.ask)}</p>
+      </details>` : ''}
+    </div>`,
     `<div class="detail-box">
       <strong>Submission – budget alignment</strong>
       <p>${escapeHtml(row.plainIssue)}</p>
@@ -1095,9 +1116,9 @@ document.getElementById('downloadCsv').addEventListener('click', () => {
   rows.forEach(r => {
     const items = (r.evidenceItems && r.evidenceItems.length) ? r.evidenceItems : [{}];
     items.forEach(e => {
-      // CSV uses the short version for readability when present, falling back
-      // to the full verbatim ask otherwise.
-      const vals = [r.id, r.overarching, (r.askShort || r.ask), r.askPage, r.verdict, r.plainIssue, r.rule, e.source, e.pdfPage, e.identifier, e.quote, e.note]
+      // CSV uses the short/display version for readability. Full verbatim
+      // text is still used internally for AI evaluation.
+      const vals = [r.id, r.overarching, getDisplayAsk(r), r.askPage, r.verdict, r.plainIssue, r.rule, e.source, e.pdfPage, e.identifier, e.quote, e.note]
         .map(v => '"' + String(v == null ? '' : v).replace(/"/g, '""') + '"');
       lines.push(vals.join(','));
     });
