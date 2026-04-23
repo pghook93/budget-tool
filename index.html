@@ -102,7 +102,7 @@
   col.col-over{width:22%}
   col.col-ask{width:auto}
   col.col-verdict{width:150px}
-  col.col-pg{width:64px}
+  col.col-pg{width:70px}
   th,td{padding:1rem 1rem;border-bottom:1px solid var(--divider);
     vertical-align:top;text-align:left;overflow-wrap:anywhere;word-break:break-word}
   th{font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.1em;
@@ -120,10 +120,9 @@
   .cell-overarching{font-size:var(--text-sm);color:var(--text-muted);line-height:1.45;
     font-style:normal}
   td.cell-page{white-space:nowrap;font-variant-numeric:tabular-nums;
-    color:var(--text-muted);font-size:var(--text-xs);text-align:right;
-    padding-right:1.1rem}
-  th.col-page{white-space:nowrap;text-align:left;padding-left:.6rem}
-  th.col-page select{text-align:left}
+    color:var(--text-muted);font-size:var(--text-xs);text-align:center}
+  th.col-page{text-align:center}
+  th.col-page select{display:none}
 
   /* Pill */
   .pill{display:inline-flex;align-items:center;gap:.3rem;padding:.3rem .625rem;
@@ -144,9 +143,9 @@
     border:1px solid var(--border);border-radius:999px;background:var(--surface);
     font-size:var(--text-sm);color:var(--text);font-family:inherit;outline:none}
   .search-input:focus{border-color:var(--primary)}
-  .search-input::placeholder{color:rgba(255,255,255,0.85);opacity:1}
-  .search-input::-webkit-input-placeholder{color:rgba(255,255,255,0.85)}
-  .search-input::-moz-placeholder{color:rgba(255,255,255,0.85);opacity:1}
+  .search-input::placeholder{color:#ffffff;opacity:.95}
+  .search-input::-webkit-input-placeholder{color:#ffffff;opacity:.95}
+  .search-input::-moz-placeholder{color:#ffffff;opacity:.95}
   .btn{min-height:40px;padding:.5rem 1rem;border:1px solid var(--border);
     background:var(--surface-2);border-radius:999px;cursor:pointer;font-size:var(--text-sm);
     color:var(--text);font-family:inherit;font-weight:500;transition:all .18s ease;
