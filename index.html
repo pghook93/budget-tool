@@ -282,10 +282,22 @@
   .insights-group{margin-top:1.25rem}
   .insights-group h3{margin:0 0 .6rem;font-size:var(--text-base);font-weight:700}
   .insights-group .group-desc{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 .75rem}
-  .insight-card{padding:1rem 1.15rem;border-radius:14px;background:var(--surface-2);
-    border:1px solid var(--border);margin-bottom:.65rem}
+  .insight-card{padding:0;border-radius:14px;background:var(--surface-2);
+    border:1px solid var(--border);margin-bottom:.5rem;overflow:hidden}
   .insight-card.risk{background:rgba(255,138,155,.06);border-color:rgba(255,138,155,.3)}
-  .insight-card .insight-title{font-weight:700;font-size:var(--text-sm);margin-bottom:.35rem}
+  .insight-card>summary{padding:.75rem 1.1rem;cursor:pointer;list-style:none;
+    display:flex;align-items:center;gap:.65rem;user-select:none;
+    transition:background .15s ease}
+  .insight-card>summary::-webkit-details-marker{display:none}
+  .insight-card>summary:hover{background:rgba(255,255,255,.03)}
+  .insight-card[open]>summary{border-bottom:1px solid var(--border);background:rgba(255,255,255,.02)}
+  .insight-card.risk[open]>summary{border-bottom-color:rgba(255,138,155,.25)}
+  .insight-card>summary::after{content:"›";margin-left:auto;font-size:1.1rem;
+    color:var(--text-muted);transition:transform .2s ease;flex-shrink:0}
+  .insight-card[open]>summary::after{transform:rotate(90deg)}
+  .insight-card .insight-body{padding:.85rem 1.1rem 1rem}
+  .insight-card .insight-title{font-weight:700;font-size:var(--text-sm);
+    flex:1;min-width:0;line-height:1.4}
   .insight-card .meta-row{font-size:var(--text-xs);color:var(--text-muted);
     margin-bottom:.55rem;display:flex;gap:.8rem;flex-wrap:wrap}
   .insight-card .insight-summary{font-size:var(--text-sm);line-height:1.55;margin:.35rem 0}
@@ -2622,7 +2634,7 @@ Return ONLY a JSON object matching this schema exactly:
       "priorityArea": "which strategic priority area this touches (short phrase)",
       "summary": "ONE sentence, max 30 words, describing what the measure does in plain English",
       "whyItMatters": "ONE sentence, max 30 words, on why this matters to the organisation's strategy. Never mention \"asks\" or the submission.",
-      "quote": "ONE verbatim sentence from the budget text, max 40 words"
+      "quote": "ONE verbatim sentence from the budget text that describes what the measure actually does (20-40 words). MUST be a full descriptive sentence, NOT a section heading, title, or fragment like 'Housing Support'. If no such sentence exists, omit this field."
     }
   ],
   "risks": [
@@ -2634,7 +2646,7 @@ Return ONLY a JSON object matching this schema exactly:
       "priorityArea": "which strategic priority this threatens (short phrase)",
       "summary": "ONE sentence, max 30 words, describing the measure",
       "whyItMatters": "ONE sentence, max 30 words, on why this undercuts the organisation's strategic position. Never mention \"asks\" or the submission.",
-      "quote": "ONE verbatim sentence from the budget text, max 40 words"
+      "quote": "ONE verbatim descriptive sentence from the budget text (20-40 words). MUST be a full sentence describing the measure, NOT a heading or title fragment. If no such sentence exists, omit this field."
     }
   ]
 }
@@ -2649,6 +2661,7 @@ Rules:
 - Return AT MOST 6 items per category. Pick only the most significant. Empty array is valid if nothing qualifies.
 - Keep every string field as short as possible. Favour brevity over completeness. A truncated JSON response is useless — terse but complete is the goal.
 - All quotes must be verbatim from the budget text. Do not invent measures or figures.
+- Quotes must be FULL DESCRIPTIVE SENTENCES (20+ words, containing a verb and explanation). Never use a section heading, program name, or short title fragment as a quote. If the only verbatim text available is a heading, omit the quote field entirely rather than using it.
 - Sort each list by how significant the item is (most significant first).
 - Return ONLY the JSON object. No prose, no code fences.`;
 }
@@ -2680,15 +2693,24 @@ function renderInsights(data) {
     const metaBits = [];
     if (item.source) metaBits.push(escapeHtml(item.source));
     if (item.pdfPage) metaBits.push(`PDF page ${escapeHtml(item.pdfPage)}`);
+    // Drop quotes that look like section headings rather than descriptive
+    // sentences (fewer than 10 words). Belt-and-braces for the prompt rule.
+    const quoteWordCount = item.quote ? item.quote.trim().split(/\s+/).length : 0;
+    const showQuote = item.quote && quoteWordCount >= 10;
+    const titleText = escapeHtml(item.title || 'Untitled measure') + (item.amount ? ' — ' + escapeHtml(item.amount) : '');
     return `
-      <article class="insight-card ${kind === 'risk' ? 'risk' : ''}">
-        <div class="insight-title">${escapeHtml(item.title || 'Untitled measure')}${item.amount ? ' — ' + escapeHtml(item.amount) : ''}</div>
-        <div style="margin-bottom:.4rem">${tags.join('')}</div>
-        <p class="insight-summary">${escapeHtml(item.summary || '')}</p>
-        ${item.quote ? `<div class="insight-quote">“${escapeHtml(item.quote)}”</div>` : ''}
-        ${metaBits.length ? `<div class="meta-row">${metaBits.map(m => `<span>${m}</span>`).join('')}</div>` : ''}
-        ${item.whyItMatters ? `<div class="insight-why"><strong>${kind === 'risk' ? 'Why this is a risk' : 'Why it matters to you'}</strong>${escapeHtml(item.whyItMatters)}</div>` : ''}
-      </article>
+      <details class="insight-card ${kind === 'risk' ? 'risk' : ''}">
+        <summary>
+          <span class="insight-title">${titleText}</span>
+          ${tags.join('')}
+        </summary>
+        <div class="insight-body">
+          <p class="insight-summary">${escapeHtml(item.summary || '')}</p>
+          ${showQuote ? `<div class="insight-quote">“${escapeHtml(item.quote)}”</div>` : ''}
+          ${metaBits.length ? `<div class="meta-row">${metaBits.map(m => `<span>${m}</span>`).join('')}</div>` : ''}
+          ${item.whyItMatters ? `<div class="insight-why"><strong>${kind === 'risk' ? 'Why this is a risk' : 'Why it matters to you'}</strong>${escapeHtml(item.whyItMatters)}</div>` : ''}
+        </div>
+      </details>
     `;
   }
 
