@@ -443,27 +443,29 @@
      CTA, and a "Powered by PolicyPatch" sign-off. Hidden once Ready is clicked.
      ==========================================================================*/
   .welcome-screen{position:fixed;inset:0;z-index:50;display:none;
-    flex-direction:column;align-items:center;justify-content:center;
-    padding:4rem clamp(1.25rem,5vw,3rem) 3rem;
+    flex-direction:column;align-items:center;
+    /* Title sits slightly above centre for a more deliberate landing feel. */
+    justify-content:flex-start;
+    padding:clamp(3rem,10vh,6.5rem) clamp(1.25rem,5vw,3rem) 3rem;
+    /* Subtle gradient only — the starfield canvas behind is visible through it. */
     background:
-      radial-gradient(1200px 700px at 20% 15%, hsla(230,55%,22%,0.75), transparent 60%),
-      radial-gradient(900px 600px at 85% 80%, hsla(172,50%,22%,0.55), transparent 65%),
-      radial-gradient(1400px 900px at 50% 50%, var(--bg-mid), var(--bg) 75%);
-    backdrop-filter:blur(14px) saturate(140%);-webkit-backdrop-filter:blur(14px) saturate(140%);
+      radial-gradient(1100px 650px at 20% 15%, hsla(230,55%,22%,0.32), transparent 62%),
+      radial-gradient(900px 600px at 85% 80%, hsla(172,50%,22%,0.22), transparent 65%),
+      radial-gradient(1400px 900px at 50% 50%, hsla(222,40%,8%,0.55), hsla(222,45%,4%,0.85) 75%);
     animation:welcomeIn .45s ease-out}
   .welcome-screen.is-visible{display:flex}
   .welcome-screen.is-leaving{animation:welcomeOut .35s ease-in forwards}
   @keyframes welcomeIn{from{opacity:0}to{opacity:1}}
   @keyframes welcomeOut{from{opacity:1}to{opacity:0}}
-  .welcome-inner{max-width:720px;width:100%;text-align:center;
+  .welcome-inner{max-width:760px;width:100%;text-align:center;
     display:flex;flex-direction:column;align-items:center;gap:1.5rem}
   .welcome-title{font-family:'Inter','Helvetica Neue',Arial,sans-serif;
-    font-size:clamp(2.4rem,5.2vw,3.4rem);font-weight:700;
-    letter-spacing:-.03em;line-height:1.08;color:#ffffff;margin:0}
+    font-size:clamp(2.8rem,6vw,4rem);font-weight:700;
+    letter-spacing:-.03em;line-height:1.05;color:#ffffff;margin:0}
   .welcome-title .welcome-org{color:var(--accent)}
-  .welcome-body{color:var(--text);font-size:var(--text-base);line-height:1.65;
+  .welcome-body{color:var(--text);font-size:var(--text-sm);line-height:1.7;
     max-width:58ch;margin:0}
-  .welcome-body p{margin:0 0 .85rem}
+  .welcome-body p{margin:0 0 .95rem}
   .welcome-body p:last-child{margin-bottom:0}
   .welcome-cta{margin-top:1rem;padding:1rem 3rem;min-height:56px;
     font-size:var(--text-lg);font-weight:600;letter-spacing:-.01em;
@@ -481,9 +483,33 @@
     letter-spacing:.22em;color:var(--text-faint);font-weight:500}
   .welcome-footer-brand{font-size:var(--text-xl);font-weight:700;color:var(--accent);
     letter-spacing:-.015em;font-family:'Inter','Helvetica Neue',Arial,sans-serif}
+
+  /* Live countdown to Federal Budget — anchored top-right, understated so it
+     doesn't fight the hero title. Numbers use tabular figures so the layout
+     doesn't jitter as values tick. */
+  .budget-countdown{position:absolute;top:clamp(1.25rem,3vh,2rem);
+    right:clamp(1.25rem,3vw,2rem);display:flex;flex-direction:column;
+    align-items:flex-end;gap:.3rem;z-index:2;
+    padding:.7rem .95rem;border-radius:var(--radius-md);
+    background:hsla(222,35%,10%,0.55);border:1px solid hsla(0,0%,100%,0.10);
+    backdrop-filter:blur(10px) saturate(130%);
+    -webkit-backdrop-filter:blur(10px) saturate(130%)}
+  .budget-countdown-label{font-size:var(--text-2xs);text-transform:uppercase;
+    letter-spacing:.18em;color:var(--accent);font-weight:600;line-height:1}
+  .budget-countdown-timer{display:flex;gap:.55rem;align-items:flex-end;
+    font-variant-numeric:tabular-nums;color:#fff}
+  .budget-countdown-unit{display:flex;flex-direction:column;align-items:center;min-width:2.1rem}
+  .budget-countdown-num{font-size:var(--text-xl);font-weight:700;line-height:1;
+    letter-spacing:-.02em}
+  .budget-countdown-sub{font-size:.58rem;text-transform:uppercase;
+    letter-spacing:.12em;color:var(--text-muted);margin-top:.2rem;font-weight:600}
+  .budget-countdown.is-live .budget-countdown-label{color:var(--success)}
   @media (max-width:560px){
     .welcome-cta{padding:.9rem 2.2rem;font-size:var(--text-base)}
     .welcome-footer{bottom:1.5rem}
+    .budget-countdown{top:.85rem;right:.85rem;padding:.55rem .7rem}
+    .budget-countdown-num{font-size:var(--text-base)}
+    .budget-countdown-unit{min-width:1.75rem}
   }
 </style>
 <script src="shared.js"></script>
@@ -512,12 +538,22 @@
 <!-- Welcome landing screen. Shown only when a preset slug is in the URL and
      the hydration call succeeds with an org name. Dismissed by the Ready? CTA. -->
 <section class="welcome-screen" id="welcomeScreen" aria-labelledby="welcomeTitle">
+  <!-- Live countdown to Federal Budget: 12 May 2026, 7:30 PM AEST (09:30 UTC). -->
+  <div class="budget-countdown" id="budgetCountdown" aria-live="polite">
+    <span class="budget-countdown-label" id="budgetCountdownLabel">Federal Budget in</span>
+    <div class="budget-countdown-timer" id="budgetCountdownTimer">
+      <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="days">—</span><span class="budget-countdown-sub">days</span></div>
+      <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="hours">—</span><span class="budget-countdown-sub">hrs</span></div>
+      <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="minutes">—</span><span class="budget-countdown-sub">min</span></div>
+      <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="seconds">—</span><span class="budget-countdown-sub">sec</span></div>
+    </div>
+  </div>
   <div class="welcome-inner">
-    <h1 class="welcome-title" id="welcomeTitle">Welcome, <span class="welcome-org" id="welcomeOrg">friend</span></h1>
+    <h1 class="welcome-title" id="welcomeTitle">Welcome <span class="welcome-org" id="welcomeOrg">friend</span></h1>
     <div class="welcome-body">
-      <p>This is a practice run. We've pre-loaded your pre-budget submission from last year so you can see how the tool works end-to-end.</p>
-      <p>Just upload last year's budget papers and click <strong>Evaluate</strong> — the tool will check every ask against the budget and surface where it landed.</p>
-      <p>On <strong>12 May 2026</strong>, you'll receive a fresh link that pre-loads your 2026–27 submission and runs the same analysis live the moment the Papers drop.</p>
+      <p>This is just a practice run so you can see how the tool works end-to-end.</p>
+      <p>We've pre-loaded your pre-budget submission from last year. All you need to do is upload last year's budget papers and click <strong>Evaluate</strong>. The tool will systematically check every one of your asks against the Budget.</p>
+      <p>Love the results? Reach out via the next screen to secure access for this year's Budget Night.</p>
     </div>
     <button type="button" class="welcome-cta" id="welcomeReadyBtn">Ready?</button>
   </div>
@@ -2481,6 +2517,48 @@ function setWelcomeOrg(name) {
   const clean = (name || '').trim();
   if (clean) el.textContent = clean;
 }
+
+// Federal Budget countdown — 12 May 2026, 7:30 PM Canberra time.
+// May falls outside AEDT (DST ends first Sunday of April), so Canberra is on
+// AEST (UTC+10). 19:30 AEST = 09:30 UTC.
+(function setupBudgetCountdown(){
+  const root = document.getElementById('budgetCountdown');
+  if (!root) return;
+  const target = Date.UTC(2026, 4, 12, 9, 30, 0); // May = month index 4
+  const label = document.getElementById('budgetCountdownLabel');
+  const nums = {
+    days: root.querySelector('[data-unit="days"]'),
+    hours: root.querySelector('[data-unit="hours"]'),
+    minutes: root.querySelector('[data-unit="minutes"]'),
+    seconds: root.querySelector('[data-unit="seconds"]')
+  };
+  const pad = n => String(Math.max(0, Math.floor(n))).padStart(2, '0');
+  function tick(){
+    const diff = target - Date.now();
+    if (diff <= 0) {
+      root.classList.add('is-live');
+      if (label) label.textContent = 'Budget is live';
+      nums.days.textContent = '00';
+      nums.hours.textContent = '00';
+      nums.minutes.textContent = '00';
+      nums.seconds.textContent = '00';
+      return false;
+    }
+    const s = Math.floor(diff / 1000);
+    const days = Math.floor(s / 86400);
+    const hours = Math.floor((s % 86400) / 3600);
+    const minutes = Math.floor((s % 3600) / 60);
+    const seconds = s % 60;
+    nums.days.textContent = pad(days);
+    nums.hours.textContent = pad(hours);
+    nums.minutes.textContent = pad(minutes);
+    nums.seconds.textContent = pad(seconds);
+    return true;
+  }
+  if (tick()) {
+    setInterval(() => { if (!tick()) { /* stops ticking once live */ } }, 1000);
+  }
+})();
 
 // Pull a YYYY-YY year range out of any preset string. Matches "2025-26",
 // "2026-27", with or without surrounding text. Returns null if none found.
