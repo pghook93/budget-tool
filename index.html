@@ -983,7 +983,7 @@ async function extractAsksFromPages(pages, statusFn) {
 // "Recommendations Housing and homelessness" when the ask sits under a
 // "Recommendations at a glance" TOC. Also normalise the casing — docs mix
 // ALL CAPS, Title Case, and sentence case inconsistently, so we force
-// sentence case across the board for a clean register.
+// AP-style title case across the board for a clean, consistent register.
 function cleanOverarching(s) {
   if (!s) return 'Uncategorised';
   let out = String(s).trim();
@@ -993,16 +993,25 @@ function cleanOverarching(s) {
   out = out.replace(/^key\s+asks?\s+/i, '');
   out = out.trim();
   if (!out) return 'Uncategorised';
-  out = toSentenceCase(out);
+  out = toTitleCase(out);
   return out;
 }
 
-// Convert any casing to sentence case while preserving known proper nouns,
-// acronyms, and abbreviations so "HOUSING AND HOMELESSNESS" becomes
-// "Housing and homelessness" but "NDIS funding" stays "NDIS funding" and
-// "Aboriginal and Torres Strait Islander peoples" keeps its proper nouns.
-function toSentenceCase(s) {
+// Convert any casing to AP-style title case: every significant word capitalised,
+// short function words (and, or, the, of, in, to, for, on, at, by, a, an, as,
+// but, nor, vs) stay lowercase unless they are the first or last word. Known
+// proper nouns, acronyms, and abbreviations are always preserved in their
+// canonical form — so "HOUSING AND HOMELESSNESS" → "Housing and Homelessness",
+// "cost of living" → "Cost of Living", "ndis funding" → "NDIS Funding", and
+// "aboriginal and torres strait islander peoples" → "Aboriginal and Torres
+// Strait Islander Peoples".
+function toTitleCase(s) {
   if (!s) return s;
+  // Short words that stay lowercase in title case unless first/last.
+  const SMALL = new Set([
+    'a', 'an', 'and', 'as', 'at', 'but', 'by', 'for', 'in', 'nor', 'of',
+    'on', 'or', 'the', 'to', 'vs', 'via',
+  ]);
   // Known terms that must keep their casing. Matched case-insensitively but
   // rendered in their canonical form. Kept short and focused on Australian
   // social-policy vocabulary — the list the user's cohort actually uses.
@@ -1019,12 +1028,38 @@ function toSentenceCase(s) {
     'LGBTIQ+', 'LGBTIQ', 'LGBTQI+', 'LGBTQI',
     'COVID', 'COVID-19',
   ];
-  // First pass: lowercase everything, then capitalise only the first letter
-  // of the first word.
-  let out = s.toLowerCase();
-  out = out.replace(/^(\s*)(\S)/, (_, sp, c) => sp + c.toUpperCase());
-  // Second pass: reinstate preserved terms anywhere they appear (word-boundary
-  // matched so "federal" in "federalism" is left alone).
+  // Split on whitespace but keep track of position so we can identify the
+  // first and last "real" word.
+  const tokens = s.split(/(\s+)/); // keeps the whitespace separators
+  const wordIndices = [];
+  tokens.forEach((t, i) => { if (!/^\s+$/.test(t) && t.length) wordIndices.push(i); });
+  const firstIdx = wordIndices[0];
+  const lastIdx = wordIndices[wordIndices.length - 1];
+
+  const titled = tokens.map((tok, i) => {
+    if (/^\s+$/.test(tok) || !tok) return tok;
+    const lower = tok.toLowerCase();
+    // Strip leading/trailing punctuation for the SMALL-word test, but keep it
+    // on the final output.
+    const core = lower.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu, '');
+    const leading = lower.slice(0, lower.indexOf(core));
+    const trailing = core ? lower.slice(lower.indexOf(core) + core.length) : '';
+    const isSmall = SMALL.has(core);
+    const isEdge = i === firstIdx || i === lastIdx;
+    if (isSmall && !isEdge) return leading + core + trailing;
+    // Capitalise first letter of the core; handle hyphenated words like
+    // "decision-making" → "Decision-Making".
+    const capped = core.split('-').map(part => {
+      if (!part) return part;
+      return part.charAt(0).toUpperCase() + part.slice(1);
+    }).join('-');
+    return leading + capped + trailing;
+  }).join('');
+
+  // Final pass: reinstate preserved terms anywhere they appear (word-boundary
+  // matched so "federal" in "federalism" is left alone). This runs AFTER title
+  // casing so canonical forms like "NDIS" and "JobSeeker" always win.
+  let out = titled;
   for (const term of PRESERVE) {
     const re = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\b`, 'gi');
     out = out.replace(re, term);

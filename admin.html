@@ -742,11 +742,29 @@ function cleanAskText(s) {
   out = out.replace(/\s+/g,' ').replace(/\s+([,.;:!?])/g,'$1').trim();
   return out;
 }
-function toSentenceCase(s) {
+// AP-style title case with preserved acronyms/proper nouns. Mirror of the
+// viewer's toTitleCase so admin + viewer render categories identically.
+function toTitleCase(s) {
   if (!s) return s;
+  const SMALL = new Set(['a','an','and','as','at','but','by','for','in','nor','of','on','or','the','to','vs','via']);
   const PRESERVE = ['NDIS','ACOSS','VCOSS','QCOSS','NCOSS','SACOSS','WACOSS','TasCOSS','COAG','ATO','ABS','DSS','DVA','DSP','CRA','FHSS','GST','HECS','JobSeeker','JobKeeper','Medicare','Centrelink','PBS','MBS','Australia','Australian','Australians','Commonwealth','Federal','State','Territory','Victoria','Victorian','NSW','Queensland','Tasmania','Tasmanian','South Australia','South Australian','Western Australia','Western Australian','Northern Territory','ACT','Aboriginal','Torres Strait Islander','First Nations','Indigenous','LGBTIQ+','LGBTIQ','LGBTQI+','LGBTQI','COVID','COVID-19'];
-  let out = s.toLowerCase();
-  out = out.replace(/^(\s*)(\S)/, (_, sp, c) => sp + c.toUpperCase());
+  const tokens = s.split(/(\s+)/);
+  const wordIdx = [];
+  tokens.forEach((t,i)=>{ if(!/^\s+$/.test(t) && t.length) wordIdx.push(i); });
+  const firstIdx = wordIdx[0], lastIdx = wordIdx[wordIdx.length-1];
+  const titled = tokens.map((tok,i) => {
+    if (/^\s+$/.test(tok) || !tok) return tok;
+    const lower = tok.toLowerCase();
+    const core = lower.replace(/^[^\p{L}\p{N}]+|[^\p{L}\p{N}]+$/gu,'');
+    const leading = lower.slice(0, lower.indexOf(core));
+    const trailing = core ? lower.slice(lower.indexOf(core) + core.length) : '';
+    const isSmall = SMALL.has(core);
+    const isEdge = i === firstIdx || i === lastIdx;
+    if (isSmall && !isEdge) return leading + core + trailing;
+    const capped = core.split('-').map(p => p ? p.charAt(0).toUpperCase() + p.slice(1) : p).join('-');
+    return leading + capped + trailing;
+  }).join('');
+  let out = titled;
   for (const term of PRESERVE) {
     const re = new RegExp(`\\b${term.replace(/[.*+?^${}()|[\]\\]/g,'\\$&')}\\b`, 'gi');
     out = out.replace(re, term);
@@ -760,7 +778,7 @@ function cleanOverarching(s) {
   out = out.replace(/^key\s+asks?\s+/i, '');
   out = out.trim();
   if (!out) return 'Uncategorised';
-  return toSentenceCase(out);
+  return toTitleCase(out);
 }
 
 async function callGeminiWithRetry(prompt, onTick) {
