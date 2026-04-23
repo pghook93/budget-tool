@@ -280,8 +280,14 @@
   /* Insights card */
   .insights-section{margin-top:1.25rem}
   .insights-group{margin-top:1.25rem}
-  .insights-group h3{margin:0 0 .6rem;font-size:var(--text-base);font-weight:700}
-  .insights-group .group-desc{color:var(--text-muted);font-size:var(--text-sm);margin:0 0 .75rem}
+  .insights-group h3{margin:0 0 .75rem;font-size:var(--text-base);font-weight:700;
+    display:flex;align-items:center;gap:.5rem}
+  .insights-group h3::before{content:"";display:inline-block;width:.55rem;height:.55rem;
+    border-radius:999px;background:var(--accent);flex-shrink:0}
+  .insights-group.is-risks h3::before{background:#ff8a9b}
+  .insights-group h3 .count-chip{font-size:var(--text-xs);font-weight:500;
+    color:var(--text-muted);background:var(--surface-3,var(--surface-2));
+    padding:.1rem .5rem;border-radius:999px;margin-left:.35rem}
   .insight-card{padding:0;border-radius:14px;background:var(--surface-2);
     border:1px solid var(--border);margin-bottom:.5rem;overflow:hidden}
   .insight-card.risk{background:rgba(255,138,155,.06);border-color:rgba(255,138,155,.3)}
@@ -827,7 +833,6 @@
 
   <section class="card card-pad insights-section" id="insightsCard" style="display:none">
     <h2 style="margin:0 0 .35rem;font-size:var(--text-lg);font-weight:700">Insights beyond the asks</h2>
-    <p class="lede" style="margin:0 0 .5rem">Budget measures relevant to your strategic priorities that weren't in the submission, plus budget measures that undercut your strategic position.</p>
     <div id="insightsFocusNudge" style="display:none;margin:.25rem 0 .75rem;padding:.55rem .75rem;background:#f6f8fb;border:1px solid #e1e7ee;border-radius:8px;font-size:var(--text-sm);color:var(--text-muted)">Tip: add a strategic focus in Step 2 (a short brief or your strategic plan) to get insights tailored to your organisation's priorities. Without one, this section shows budget measures outside the scope of the submission's asks.</div>
     <div id="insightsBody"></div>
   </section>
@@ -972,16 +977,44 @@ function render() {
     n === rows.length ? `${n} asks` : `${n} of ${rows.length} asks`;
 }
 
-// Returns the short/display version of an ask for the table + CSV:
-// 1. If the AI returned an askShort, use it.
-// 2. Else if the verbatim ask is > 50 words, truncate at ~40 words + "…".
-// 3. Else return the full ask.
+// Returns the short/display version of an ask for the table + CSV.
+// Prefers the AI-supplied askShort. If absent and the verbatim ask is long,
+// truncate at the last complete sentence that keeps the result reasonably
+// short — never cut mid-word or mid-clause. If no sentence boundary gives a
+// usable length, fall back to the AI short if available, else the full text.
 function getDisplayAsk(row) {
   if (row.askShort) return row.askShort;
   if (!row.ask) return '';
-  const words = row.ask.trim().split(/\s+/);
-  if (words.length <= 50) return row.ask;
-  return words.slice(0, 40).join(' ') + '…';
+  const full = row.ask.trim();
+  const words = full.split(/\s+/);
+  if (words.length <= 50) return full;
+
+  // Split into sentences on terminator + space/end. Keep the terminator with
+  // each sentence. Common terminators: . ! ? and the closing quote variants
+  // we see in submission PDFs (', ”).
+  const sentences = full.match(/[^.!?]+[.!?]['”]*(?=\s|$)/g);
+  if (sentences && sentences.length > 1) {
+    // Accumulate whole sentences while we're under 60 words. This lets us
+    // end on a clean sentence boundary naturally — one full sentence for
+    // short-first-sentence asks, two if the first is tiny, etc.
+    let built = '';
+    let builtWords = 0;
+    for (const s of sentences) {
+      const sWords = s.trim().split(/\s+/).length;
+      if (builtWords + sWords > 60 && built) break;
+      built += (built ? ' ' : '') + s.trim();
+      builtWords += sWords;
+      if (builtWords >= 25) break; // enough for a meaningful lede
+    }
+    if (built) return built;
+  }
+  // Fallback: single very long sentence with no internal terminators.
+  // Prefer cutting at a semicolon or colon before giving up on truncation.
+  const clauseBreak = full.search(/[;:]/);
+  if (clauseBreak > 0 && clauseBreak < 400) return full.slice(0, clauseBreak) + '.';
+  // Last resort: return the full verbatim text. Table cell wraps — ugly but
+  // complete, never mid-word.
+  return full;
 }
 
 // ============================================================================
@@ -2745,17 +2778,15 @@ function renderInsights(data) {
   if (priorities.length) {
     sections.push(`
       <div class="insights-group">
-        <h3>Unasked priority measures (${priorities.length})</h3>
-        <p class="group-desc">Budget measures that touch your strategic priorities but were not in the submission's asks.</p>
+        <h3>Areas of interest<span class="count-chip">${priorities.length}</span></h3>
         ${priorities.map(p => cardHtml(p, 'priority')).join('')}
       </div>
     `);
   }
   if (risks.length) {
     sections.push(`
-      <div class="insights-group">
-        <h3>Risks to your strategic position (${risks.length})</h3>
-        <p class="group-desc">Budget measures that undercut, contradict, or create tension with your strategic priorities.</p>
+      <div class="insights-group is-risks">
+        <h3>Risks<span class="count-chip">${risks.length}</span></h3>
         ${risks.map(r => cardHtml(r, 'risk')).join('')}
       </div>
     `);
