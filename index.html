@@ -2386,21 +2386,30 @@ function updateStepper() {
     // some asks unevaluated (usually because upstream providers were overloaded),
     // the button becomes a 'Retry pending' action that only re-runs those.
     const pendingCount = rows.filter(r => !r.verdict || r.verdict === 'Not yet evaluated').length;
+    // While evaluation is actively running, pending asks are just asks we haven't
+    // reached yet — not genuine failures. Suppress the 'some pending' messaging
+    // until the run ends and we know what's actually stuck.
+    const evalRunning = typeof evalAbortController !== 'undefined' && !!evalAbortController;
     const allDone = anyEvaluated && pendingCount === 0;
-    const somePending = anyEvaluated && pendingCount > 0;
+    const somePending = anyEvaluated && pendingCount > 0 && !evalRunning;
     if (evalBtn) {
-      if (somePending) evalBtn.textContent = `Retry ${pendingCount} pending ${pendingCount === 1 ? 'ask' : 'asks'}`;
+      if (evalRunning) evalBtn.textContent = `Evaluating… (${rows.length - pendingCount}/${rows.length})`;
+      else if (somePending) evalBtn.textContent = `Retry ${pendingCount} pending ${pendingCount === 1 ? 'ask' : 'asks'}`;
       else if (allDone) evalBtn.textContent = `Re-evaluate ${rows.length} asks`;
       else evalBtn.textContent = `Evaluate ${rows.length} asks`;
     }
-    if (t) t.textContent = somePending ? 'Some asks need another go' : (allDone ? 'Evaluation complete' : 'Run alignment analysis');
-    if (b) b.textContent = somePending
-      ? `${rows.length - pendingCount} of ${rows.length} asks evaluated. The remaining ${pendingCount} didn't finish on the first pass — click Retry to pick them up.`
-      : (allDone
-        ? 'Results below. Re-run with changes to your focus or budget docs.'
-        : (hasFocus
-          ? 'Checks each ask against the budget and surfaces insights tied to your focus.'
-          : 'Checks each ask against the budget. Add a focus brief in step 2 for extra insights.'));
+    if (t) t.textContent = evalRunning
+      ? 'Evaluating asks…'
+      : (somePending ? 'Some asks need another go' : (allDone ? 'Evaluation complete' : 'Run alignment analysis'));
+    if (b) b.textContent = evalRunning
+      ? `${rows.length - pendingCount} of ${rows.length} asks evaluated so far…`
+      : (somePending
+        ? `${rows.length - pendingCount} of ${rows.length} asks evaluated. The remaining ${pendingCount} didn't finish on the first pass — click Retry to pick them up.`
+        : (allDone
+          ? 'Results below. Re-run with changes to your focus or budget docs.'
+          : (hasFocus
+            ? 'Checks each ask against the budget and surfaces insights tied to your focus.'
+            : 'Checks each ask against the budget. Add a focus brief in step 2 for extra insights.')));
   }
 }
 // Keep the old name alive for any lingering callers.
