@@ -290,6 +290,9 @@
   .stepper-node.is-done .stepper-num{background:var(--success);border-color:var(--success);color:#1a1f2b}
   .stepper-node.is-done .stepper-num::after{content:"✓";font-size:.8rem;font-weight:800}
   .stepper-node.is-done .stepper-num > span{display:none}
+  /* When step 1 is already done via a preset, hide its upload button — the submission is pre-loaded. */
+  #step1Node.is-done.rehearsal #step1Action,
+  #step1Node.is-done.live #step1Action{display:none}
 
   /* CURRENT — frosted-white glow marker, no yellow */
   .stepper-node.is-current{background:var(--primary-tint);
