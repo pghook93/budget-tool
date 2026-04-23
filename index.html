@@ -547,9 +547,12 @@ async function extractPdfText(file) {
   const buf = await file.arrayBuffer();
   const pdf = await lib.getDocument({ data: buf }).promise;
 
-  // First pass: collect all font heights across the doc so we know what's "body".
-  // Anything meaningfully larger than the median is almost certainly a heading —
-  // which is the single most useful structural signal for category detection.
+  // PASS 1 — read every page, collect items plus font heights (for heading tier
+  // detection later). PDF.js emits text as many small "items" with positional
+  // transforms: transform[0]=font scale, transform[4]=x, transform[5]=y, and
+  // each item has its own width. We preserve all of that — the naive
+  // "concatenate items with spaces" approach shreds words, splits ligatures,
+  // and merges adjacent lines into fake headings.
   const pagesRaw = [];
   const allHeights = [];
   for (let i = 1; i <= pdf.numPages; i++) {
@@ -561,19 +564,16 @@ async function extractPdfText(file) {
       if (h > 0 && it.str && it.str.trim()) allHeights.push(h);
     }
   }
-  // Median body height sets the baseline. Anything meaningfully larger is a
-  // heading. Many docs (e.g. VCOSS) use two heading tiers: a big chapter title
-  // and a smaller section heading — we want the narrower one as the category.
-  //
-  // Approach: find distinct heading sizes above body * 1.15, take the top two
-  // tiers. Largest = [H1] (chapter), second largest = [H2] (section). For flat
-  // single-tier docs, only [H1] fires and the prompt falls back gracefully.
+
+  // Median body height = typical text size on the page. Anything >= body*1.15
+  // is a candidate heading. Two tiers (H1 chapter / H2 section) handle docs
+  // that use a big title + narrower section headings.
   const sortedH = allHeights.slice().sort((a,b)=>a-b);
   const median = sortedH.length ? sortedH[Math.floor(sortedH.length/2)] : 0;
   const HEADING_FLOOR = median * 1.15;
 
-  // Bucket heading-sized heights to the nearest 0.25pt so near-identical sizes
-  // collapse into one tier (kerning/antialias jitter is ~<0.1pt).
+  // Bucket candidate heights to 0.25pt to collapse kerning jitter; keep only
+  // tiers with ≥2 occurrences so a stray glyph doesn't become a heading size.
   const tierCounts = new Map();
   for (const h of allHeights) {
     if (HEADING_FLOOR > 0 && h >= HEADING_FLOOR) {
@@ -581,51 +581,103 @@ async function extractPdfText(file) {
       tierCounts.set(key, (tierCounts.get(key) || 0) + 1);
     }
   }
-  // Keep tiers with enough occurrences to be a real structural heading
-  // (rules out stray large glyphs like pull-quote marks). Min 2 occurrences.
   const tiers = [...tierCounts.entries()]
     .filter(([, n]) => n >= 2)
     .map(([size]) => size)
     .sort((a,b) => b - a);
-
-  // Tier boundaries: anything >= H1_MIN is [H1]; >= H2_MIN and < H1_MIN is [H2].
-  // If only one tier exists, H2_MIN is unreachable and everything large is [H1].
   const H1_MIN = tiers[0] ? tiers[0] - 0.25 : Infinity;
   const H2_MIN = tiers[1] ? tiers[1] - 0.25 : Infinity;
 
+  function tierFor(h) {
+    if (h >= H1_MIN) return 'H1';
+    if (h >= H2_MIN) return 'H2';
+    return null;
+  }
+
+  // PASS 2 — rebuild each page's text using x/y positions, not raw iteration.
+  //
+  // Step A: group items into visual lines by y-coordinate (items within 2pt
+  // vertical of each other belong to the same line).
+  // Step B: within each line, sort by x and reconstruct word spacing from
+  // positional gaps (item's end-x vs next item's start-x).
+  // Step C: a line is only tagged [H1]/[H2] if ALL its items share that tier,
+  // so a pull-quote label on one line never merges with a body heading on the
+  // next line.
   const pages = pagesRaw.map(({ page, items }) => {
-    // Mark heading-sized runs with [H1] or [H2] on their own line. Consecutive
-    // items of the same tier get merged so "Advance treaty" stays one heading.
-    const lines = [];
-    let buf = '';
-    let bufTier = null; // 'H1' | 'H2' | null
-    const flush = () => {
-      if (buf && bufTier) { lines.push(`[${bufTier}] ${buf}`); }
-      buf = ''; bufTier = null;
-    };
+    if (!items.length) return { page, text: '' };
+
+    // Group into lines by y (transform[5]).
+    const lineBuckets = new Map(); // key = rounded y -> array of items
     for (const it of items) {
       const s = String(it.str || '');
-      if (!s.trim()) continue;
-      const h = Math.abs((it.transform && it.transform[0]) || it.height || 0);
-      let tier = null;
-      if (h >= H1_MIN) tier = 'H1';
-      else if (h >= H2_MIN) tier = 'H2';
-      if (tier) {
-        if (bufTier && bufTier !== tier) flush();
-        buf += (buf ? ' ' : '') + s.trim();
-        bufTier = tier;
-      } else {
-        if (bufTier) flush();
-        lines.push(s);
-      }
+      if (!s) continue;
+      const tr = it.transform || [0,0,0,0,0,0];
+      const y = Math.round(tr[5]); // round to nearest pt — same baseline = same line
+      if (!lineBuckets.has(y)) lineBuckets.set(y, []);
+      lineBuckets.get(y).push(it);
     }
-    if (bufTier) flush();
-    const text = lines.join(' ')
-      .replace(/\s+/g, ' ')
-      .replace(/\s*\[H1\]\s*/g, '\n[H1] ')
-      .replace(/\s*\[H2\]\s*/g, '\n[H2] ')
-      .trim();
-    return { page, text };
+    // Sort lines top-to-bottom (PDF y grows upward, so descending).
+    const yKeys = [...lineBuckets.keys()].sort((a,b) => b - a);
+
+    const outLines = [];
+    for (const y of yKeys) {
+      const lineItems = lineBuckets.get(y)
+        .slice()
+        .sort((a,b) => (a.transform[4] || 0) - (b.transform[4] || 0));
+
+      // Reconstruct text: join adjacent items directly when their bounding
+      // boxes abut, insert a single space when there's a visible gap. This
+      // fixes "fund ing" → "funding" and "202 5" → "2025".
+      let lineText = '';
+      let prevEndX = null;
+      let prevFontH = null;
+      const itemTiers = [];
+      for (const it of lineItems) {
+        const s = String(it.str || '');
+        if (!s) continue;
+        const tr = it.transform;
+        const x = tr[4] || 0;
+        const w = it.width || 0;
+        const h = Math.abs(tr[0] || it.height || 0);
+        // Gap threshold: if x-gap > ~25% of the current font size, insert a
+        // space. Smaller gaps mean the items are glyphs of the same word.
+        if (prevEndX !== null) {
+          const gap = x - prevEndX;
+          const fontSize = h || prevFontH || median || 10;
+          const needsSpace = gap > fontSize * 0.25;
+          // Also respect explicit whitespace PDF.js already emitted.
+          const endsWithSpace = /\s$/.test(lineText);
+          const startsWithSpace = /^\s/.test(s);
+          if (needsSpace && !endsWithSpace && !startsWithSpace) {
+            lineText += ' ';
+          }
+        }
+        lineText += s;
+        prevEndX = x + w;
+        prevFontH = h;
+        if (s.trim()) itemTiers.push(tierFor(h));
+      }
+
+      lineText = lineText.replace(/\s+/g, ' ').trim();
+      if (!lineText) continue;
+
+      // Line-level heading tier: ALL non-whitespace items must share a tier,
+      // otherwise it's mixed content and we treat it as body. This prevents
+      // a running-header label + body heading on the same line from getting
+      // stamped as a single [H1].
+      const realTiers = itemTiers.filter(t => t !== null);
+      let lineTier = null;
+      if (realTiers.length && realTiers.length === itemTiers.length) {
+        const first = realTiers[0];
+        if (realTiers.every(t => t === first)) lineTier = first;
+      }
+
+      outLines.push(lineTier ? `[${lineTier}] ${lineText}` : lineText);
+    }
+
+    // Join lines with real newlines so the extraction prompt sees document
+    // structure, not a single run-on paragraph.
+    return { page, text: outLines.join('\n') };
   });
   return pages;
 }
@@ -648,9 +700,9 @@ Return ONLY a JSON object matching this schema exactly:
 Rules:
 - Extract EVERY formal recommendation, ask, or call-to-action in the submission (typically marked "Recommendation", "We recommend", "The Government should", major bullet asks, or listed under "Major Recommendations"/"Key Asks").
 - "ask" must be a direct verbatim quote. Do not summarise, shorten, or rewrite. EXCEPTION: strip trailing or inline footnote markers (e.g. superscript numbers like "19" at end of sentence, or "page 9 4" artefacts from PDF extraction) and parenthetical cross-references (e.g. "(See also: 'Value the community sector' on page 9 4.)"). Keep the substantive policy text intact — only remove these pagination/reference artefacts.
-- "overarching" must be a verbatim heading from the document. Lines prefixed with [H1] or [H2] in the submission text below are headings detected by font size — [H1] is a larger chapter-level title, [H2] is a narrower section heading. Prefer the nearest preceding [H2] as the overarching category (it is the more specific one). If no [H2] precedes the ask, use the nearest preceding [H1]. Never invent or paraphrase a category label; if neither precedes the ask, use "Uncategorised".
-- "askPage" = the page number where the recommendation appears.
-- Do not invent recommendations. If the document has few, return few.
+- "overarching" must be a verbatim heading from the document. Lines prefixed with [H1] or [H2] in the submission text below are headings detected by font size — [H1] is a larger chapter-level title, [H2] is a narrower section heading. Prefer the nearest preceding [H2] as the overarching category (it is the more specific one). If no [H2] precedes the ask, use the nearest preceding [H1]. Never invent or paraphrase a category label; if neither precedes the ask, use "Uncategorised". IMPORTANT: if the nearest heading is a generic list/summary label like "Recommendations", "Our recommendations", "Recommendations at a glance", "Key asks", "Summary of recommendations", or "Major recommendations", that is a CONTAINER for the whole list — skip it and use the NEXT preceding heading instead (which will be the actual policy theme like "Housing and homelessness", "Income support", etc.). Also strip any leading "Recommendations" / "Recommendation:" prefix from the heading text itself if present.
+- "askPage" = the page number where the recommendation is discussed in substance. If the same recommendation appears in both a summary/"at a glance" list AND in a later body section that explains it, use the body section page (the fuller treatment), not the summary page. If it only appears in the summary, use that page.
+- Do not invent recommendations. If the document has few, return few. Do not extract the same recommendation twice because it appears in both the summary and the body — pick the body version and cite the body page.
 - Return ONLY the JSON object. No prose, no code fences.
 
 SUBMISSION TEXT:
@@ -907,6 +959,21 @@ async function extractAsksFromPages(pages, statusFn) {
   return { rows: deduped, chunkFailures };
 }
 
+// Strip generic summary/container prefixes from the overarching category so
+// a section heading like "Housing and homelessness" doesn't get saved as
+// "Recommendations Housing and homelessness" when the ask sits under a
+// "Recommendations at a glance" TOC.
+function cleanOverarching(s) {
+  if (!s) return 'Uncategorised';
+  let out = String(s).trim();
+  // Remove leading "Recommendations", "Recommendation:", "Our recommendations",
+  // "Key asks", "Summary of recommendations", "Major recommendations", etc.
+  out = out.replace(/^(?:our\s+|summary\s+of\s+|major\s+|key\s+)?recommendation[s:]*\s+(?:at\s+a\s+glance\s+)?/i, '');
+  out = out.replace(/^key\s+asks?\s+/i, '');
+  out = out.trim();
+  return out || 'Uncategorised';
+}
+
 // Scrub footnote markers, cross-references, and stray page-number artefacts
 // that sneak in from PDF text extraction. Conservative — only targets obvious
 // pagination/reference residue so the substantive policy text is never touched.
@@ -934,7 +1001,7 @@ function rowsFromExtraction(extracted) {
   }
   return extracted.rows.map((r, i) => ({
     id: i + 1,
-    overarching: String(r.overarching || 'Uncategorised').trim(),
+    overarching: cleanOverarching(r.overarching),
     ask: cleanAskText(r.ask),
     askPage: String(r.askPage || '').trim(),
     verdict: 'Not yet evaluated',
