@@ -2199,9 +2199,19 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   if (!signal.aborted) {
     const brief = (document.getElementById('focusBrief').value || '').trim();
     const hasContext = !!brief || !!strategicPlan || rows.length > 0;
+    console.log('[insights auto-trigger]', { hasContext, hasBrief: !!brief, hasPlan: !!strategicPlan, rowsLen: rows.length, budgetDocs: budgetDocs.length });
     if (hasContext && budgetDocs.length) {
+      // Ensure the button's disabled state reflects current context before we
+      // try to click it — guards against a stale disabled flag from earlier.
+      if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
       const ibtn = document.getElementById('insightsBtn');
-      if (ibtn && !ibtn.disabled) ibtn.click();
+      console.log('[insights auto-trigger] button', { found: !!ibtn, disabled: ibtn ? ibtn.disabled : 'n/a' });
+      if (ibtn) {
+        // Force-enable and click. The click handler re-validates inputs, so if
+        // anything is genuinely missing it'll still bail safely with a status.
+        ibtn.disabled = false;
+        ibtn.click();
+      }
     }
   }
 });
