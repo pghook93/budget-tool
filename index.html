@@ -2315,6 +2315,17 @@ function setInsightsStatus(msg, kind) {
   const el = document.getElementById('insightsStatus');
   el.className = 'upload-status' + (kind ? ' ' + kind : '');
   el.textContent = msg;
+  // Also surface the status inside Step 4's visible body so the user has
+  // a progress signal even though the insights button itself is hidden.
+  // `kind` is one of: '', 'ok', 'working', 'error'.
+  const step4Body = document.getElementById('step4Body');
+  if (step4Body && msg) {
+    const prefix = kind === 'working' ? 'Generating insights — ' :
+                   kind === 'error'   ? 'Insights issue — ' :
+                   kind === 'ok'      ? 'Insights ready — ' : '';
+    step4Body.textContent = prefix + msg;
+    step4Body.dataset.insightsKind = kind || '';
+  }
 }
 
 function updateInsightsButtonState() {
@@ -2457,7 +2468,11 @@ function updateStepper() {
     if (t) t.textContent = evalRunning
       ? 'Evaluating asks…'
       : (somePending ? 'Some asks need another go' : (allDone ? 'Evaluation complete' : 'Run alignment analysis'));
-    if (b) b.textContent = evalRunning
+    // If the insights pass has written a status into step4Body, don't clobber
+    // it with the default eval copy — the user needs that progress signal.
+    const insightsKind = b && b.dataset ? (b.dataset.insightsKind || '') : '';
+    const insightsActive = insightsKind === 'working';
+    if (b && !insightsActive) b.textContent = evalRunning
       ? `${rows.length - pendingCount} of ${rows.length} asks evaluated so far…`
       : (somePending
         ? `${rows.length - pendingCount} of ${rows.length} asks evaluated. The remaining ${pendingCount} didn't finish on the first pass — click Retry to pick them up.`
