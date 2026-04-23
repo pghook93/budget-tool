@@ -3,6 +3,13 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
+<!-- Cache-bust: tell browsers to re-check on every visit. GitHub Pages sets
+     max-age=600 which can leave orgs on stale HTML for 10 minutes after a
+     deploy; these meta tags + no-store cache control force a fresh check so
+     all 20+ orgs see the latest version on Budget Night. -->
+<meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
+<meta http-equiv="Pragma" content="no-cache" />
+<meta http-equiv="Expires" content="0" />
 <title>ACOSS Ask Register — Budget Alignment</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -2359,13 +2366,25 @@ function updateStepper() {
     const t = document.getElementById('step4Title');
     const b = document.getElementById('step4Body');
     const evalBtn = document.getElementById('evaluateBtn');
-    if (evalBtn) evalBtn.textContent = anyEvaluated ? `Re-evaluate ${rows.length} asks` : `Evaluate ${rows.length} asks`;
-    if (t) t.textContent = anyEvaluated ? 'Evaluation complete' : 'Run alignment analysis';
-    if (b) b.textContent = anyEvaluated
-      ? 'Results below. Re-run with changes to your focus or budget docs.'
-      : (hasFocus
-        ? 'Checks each ask against the budget and surfaces insights tied to your focus.'
-        : 'Checks each ask against the budget. Add a focus brief in step 2 for extra insights.');
+    // Count asks still waiting on a verdict. When the first pass finishes with
+    // some asks unevaluated (usually because upstream providers were overloaded),
+    // the button becomes a 'Retry pending' action that only re-runs those.
+    const pendingCount = rows.filter(r => !r.verdict || r.verdict === 'Not yet evaluated').length;
+    const allDone = anyEvaluated && pendingCount === 0;
+    const somePending = anyEvaluated && pendingCount > 0;
+    if (evalBtn) {
+      if (somePending) evalBtn.textContent = `Retry ${pendingCount} pending ${pendingCount === 1 ? 'ask' : 'asks'}`;
+      else if (allDone) evalBtn.textContent = `Re-evaluate ${rows.length} asks`;
+      else evalBtn.textContent = `Evaluate ${rows.length} asks`;
+    }
+    if (t) t.textContent = somePending ? 'Some asks need another go' : (allDone ? 'Evaluation complete' : 'Run alignment analysis');
+    if (b) b.textContent = somePending
+      ? `${rows.length - pendingCount} of ${rows.length} asks evaluated. The remaining ${pendingCount} didn't finish on the first pass — click Retry to pick them up.`
+      : (allDone
+        ? 'Results below. Re-run with changes to your focus or budget docs.'
+        : (hasFocus
+          ? 'Checks each ask against the budget and surfaces insights tied to your focus.'
+          : 'Checks each ask against the budget. Add a focus brief in step 2 for extra insights.'));
   }
 }
 // Keep the old name alive for any lingering callers.
