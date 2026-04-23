@@ -2661,7 +2661,8 @@ Rules:
 - Return AT MOST 6 items per category. Pick only the most significant. Empty array is valid if nothing qualifies.
 - Keep every string field as short as possible. Favour brevity over completeness. A truncated JSON response is useless — terse but complete is the goal.
 - All quotes must be verbatim from the budget text. Do not invent measures or figures.
-- Quotes must be FULL DESCRIPTIVE SENTENCES (20+ words, containing a verb and explanation). Never use a section heading, program name, or short title fragment as a quote. If the only verbatim text available is a heading, omit the quote field entirely rather than using it.
+- Quotes must be FULL DESCRIPTIVE SENTENCES (typically 15+ words, containing a verb and explanation of what the measure does). Never use a section heading, program name, or short title fragment as a quote. If the only verbatim text available is a heading, omit the quote field entirely rather than using it.
+- The "amount" field MUST match a dollar figure that appears in the "quote" (or directly adjacent to it in the source). Do NOT use a total programme envelope as the "amount" when the "quote" describes a sub-component with a different figure. If the heading figure and the sentence figure differ, prefer the figure from the descriptive sentence and use THAT sentence as the quote.
 - Sort each list by how significant the item is (most significant first).
 - Return ONLY the JSON object. No prose, no code fences.`;
 }
@@ -2694,9 +2695,15 @@ function renderInsights(data) {
     if (item.source) metaBits.push(escapeHtml(item.source));
     if (item.pdfPage) metaBits.push(`PDF page ${escapeHtml(item.pdfPage)}`);
     // Drop quotes that look like section headings rather than descriptive
-    // sentences (fewer than 10 words). Belt-and-braces for the prompt rule.
+    // sentences (fewer than 7 words). Belt-and-braces for the prompt rule.
     const quoteWordCount = item.quote ? item.quote.trim().split(/\s+/).length : 0;
-    const showQuote = item.quote && quoteWordCount >= 10;
+    const showQuote = item.quote && quoteWordCount >= 7;
+    // If there's no usable quote, tell the user the excerpt wasn't available
+    // rather than silently hiding the section — they need to know to check the
+    // budget papers directly for this item.
+    const noQuoteNotice = !showQuote
+      ? `<div class="insight-quote" style="font-style:normal;color:var(--text-muted);font-size:var(--text-xs)">No verbatim excerpt available — refer to the budget document and page above for full wording.</div>`
+      : '';
     const titleText = escapeHtml(item.title || 'Untitled measure') + (item.amount ? ' — ' + escapeHtml(item.amount) : '');
     return `
       <details class="insight-card ${kind === 'risk' ? 'risk' : ''}">
@@ -2706,7 +2713,7 @@ function renderInsights(data) {
         </summary>
         <div class="insight-body">
           <p class="insight-summary">${escapeHtml(item.summary || '')}</p>
-          ${showQuote ? `<div class="insight-quote">“${escapeHtml(item.quote)}”</div>` : ''}
+          ${showQuote ? `<div class="insight-quote">“${escapeHtml(item.quote)}”</div>` : noQuoteNotice}
           ${metaBits.length ? `<div class="meta-row">${metaBits.map(m => `<span>${m}</span>`).join('')}</div>` : ''}
           ${item.whyItMatters ? `<div class="insight-why"><strong>${kind === 'risk' ? 'Why this is a risk' : 'Why it matters to you'}</strong>${escapeHtml(item.whyItMatters)}</div>` : ''}
         </div>
