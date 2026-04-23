@@ -166,7 +166,7 @@
     padding:4vh 1rem 4vh;overflow-y:auto;backdrop-filter:blur(6px)}
   .modal-overlay.open{display:flex}
   .modal{background:var(--surface);border-radius:var(--radius-xl);
-    box-shadow:var(--shadow-md);width:min(780px,100%);max-width:780px;
+    box-shadow:var(--shadow-md);width:min(960px,100%);max-width:960px;
     animation:modalIn .18s ease-out}
   @keyframes modalIn{from{transform:translateY(8px);opacity:0}to{transform:translateY(0);opacity:1}}
   .modal-header{padding:1.25rem 1.5rem;border-bottom:1px solid var(--divider);
@@ -196,6 +196,43 @@
     text-decoration:none;font-weight:600}
   .evidence-card a:hover{text-decoration:underline}
   .overarching-box{background:var(--surface-3);border-color:var(--border)}
+
+  /* "Next best thing" card: shown on Not-reflected ask detail modals. Soft
+     amber accent so it reads as "closest thing" rather than a real match. */
+  .next-best{margin-top:.9rem;padding:.95rem 1.05rem;border-radius:14px;
+    background:linear-gradient(135deg, hsla(40,85%,55%,0.08), hsla(220,30%,14%,0.6));
+    border:1px solid hsla(40,85%,55%,0.28)}
+  .next-best-label{font-size:var(--text-2xs);text-transform:uppercase;
+    letter-spacing:.14em;color:hsl(40,85%,72%);font-weight:700;margin-bottom:.35rem}
+  .next-best-title{font-weight:600;font-size:var(--text-sm);color:var(--text-strong);
+    margin-bottom:.3rem;line-height:1.35}
+  .next-best-summary{margin:0 0 .5rem;font-size:var(--text-sm);
+    line-height:1.55;color:var(--text)}
+  .next-best-quote{margin:.4rem 0 0;border-left-color:hsl(40,85%,55%);
+    background:hsla(40,30%,12%,0.4)}
+
+  /* Evaluate progress bar: indeterminate shimmer while preparing the corpus,
+     then switches to a deterministic fill as asks complete. */
+  .eval-progress{margin-top:.75rem;width:100%;max-width:520px;
+    display:flex;flex-direction:column;gap:.45rem}
+  .eval-progress[hidden]{display:none}
+  .eval-progress-head{display:flex;justify-content:space-between;align-items:baseline;
+    gap:.75rem;font-size:var(--text-xs);color:var(--text-muted);
+    font-variant-numeric:tabular-nums}
+  .eval-progress-label{color:var(--text)}
+  .eval-progress-count{color:var(--text-muted);font-weight:600}
+  .eval-progress-track{position:relative;width:100%;height:8px;border-radius:999px;
+    background:var(--surface-3);overflow:hidden;border:1px solid var(--border-soft)}
+  .eval-progress-fill{height:100%;border-radius:999px;background:var(--accent);
+    transition:width .3s ease;box-shadow:0 0 12px hsla(172,65%,58%,0.35)}
+  .eval-progress-track[data-mode="indeterminate"] .eval-progress-fill{
+    width:40% !important;
+    background:linear-gradient(90deg, transparent, var(--accent) 50%, transparent);
+    animation:evalShimmer 1.4s linear infinite}
+  @keyframes evalShimmer{
+    0%{transform:translateX(-100%)}
+    100%{transform:translateX(250%)}
+  }
 
   @media (max-width:760px){
     .shell{padding:1rem}
@@ -358,30 +395,52 @@
   .modal-actions{display:flex;justify-content:flex-end;gap:.6rem;margin-top:1rem}
 
   /* Sign-up CTA: teal-tinted glass card, appears after first analysis run. */
-  .signup-cta{display:flex;gap:1.25rem;align-items:center;justify-content:space-between;
-    padding:1.1rem 1.35rem;margin:0 0 var(--space-5);
-    border-radius:var(--radius-xl);
-    background:linear-gradient(135deg, hsla(172,65%,58%,0.14), hsla(220,35%,24%,0.5));
-    border:1px solid hsla(172,65%,58%,0.32);
-    box-shadow:0 0 40px hsla(172,65%,58%,0.14), inset 0 0 0 1px hsla(0,0%,100%,0.04);
-    backdrop-filter:blur(10px) saturate(140%);
-    -webkit-backdrop-filter:blur(10px) saturate(140%)}
-  .signup-cta[hidden]{display:none}
-  .signup-cta-eyebrow{font-size:var(--text-2xs);text-transform:uppercase;letter-spacing:.18em;
-    color:var(--accent);font-weight:500;margin-bottom:.2rem}
-  .signup-cta-title{font-size:var(--text-lg);font-weight:500;letter-spacing:-.01em;
-    color:var(--text-strong);line-height:1.2}
-  .signup-cta-body{margin:.3rem 0 0;color:var(--text-muted);font-size:var(--text-sm);
-    line-height:1.5;max-width:62ch}
-  .signup-cta-btn{white-space:nowrap;flex-shrink:0;text-decoration:none;
+  /* Right-edge sign-up dock. The tab is always pinned; clicking toggles the
+     panel which slides out from the right. Kept above the countdown (z:65)
+     so when both are visible they stack cleanly. */
+  .signup-dock[hidden]{display:none}
+  .signup-dock-tab{position:fixed;right:0;top:50%;transform:translateY(-50%);
+    writing-mode:vertical-rl;transform-origin:center;
     background:var(--accent);color:#04181a;border:1px solid var(--accent);
-    font-weight:500;padding:.65rem 1.1rem;border-radius:var(--radius-md);
-    display:inline-flex;align-items:center;gap:.4rem;transition:all .18s ease}
-  .signup-cta-btn:hover{background:var(--accent-strong);border-color:var(--accent-strong);
+    border-right:none;border-radius:var(--radius-md) 0 0 var(--radius-md);
+    padding:.85rem .55rem;font:inherit;font-size:var(--text-xs);font-weight:600;
+    letter-spacing:.06em;cursor:pointer;z-index:65;
+    box-shadow:-6px 0 24px hsla(172,65%,58%,0.22);
+    transition:background .18s ease, padding .18s ease}
+  .signup-dock-tab:hover{background:var(--accent-strong);padding-right:.75rem}
+  .signup-dock-tab-text{display:inline-block;transform:rotate(180deg)}
+  .signup-dock-panel{position:fixed;right:0;top:0;bottom:0;width:min(400px,92vw);
+    background:linear-gradient(135deg, hsla(172,65%,58%,0.08), hsla(220,35%,14%,0.96));
+    border-left:1px solid hsla(172,65%,58%,0.32);
+    box-shadow:-12px 0 48px hsla(0,0%,0%,0.45);
+    padding:3.5rem 1.75rem 2rem;z-index:64;
+    transform:translateX(100%);transition:transform .28s cubic-bezier(.2,.8,.2,1);
+    display:flex;flex-direction:column;gap:.55rem;
+    backdrop-filter:blur(14px) saturate(140%);
+    -webkit-backdrop-filter:blur(14px) saturate(140%)}
+  .signup-dock.is-open .signup-dock-panel{transform:translateX(0)}
+  .signup-dock.is-open .signup-dock-tab{right:min(400px,92vw)}
+  .signup-dock-close{position:absolute;top:.65rem;right:.75rem;width:32px;height:32px;
+    border-radius:999px;background:transparent;border:none;color:var(--text-muted);
+    font-size:1.5rem;line-height:1;cursor:pointer;display:flex;align-items:center;
+    justify-content:center;transition:background .15s ease, color .15s ease}
+  .signup-dock-close:hover{background:hsla(0,0%,100%,.08);color:var(--text)}
+  .signup-dock-eyebrow{font-size:var(--text-2xs);text-transform:uppercase;
+    letter-spacing:.18em;color:var(--accent);font-weight:600}
+  .signup-dock-title{font-size:var(--text-lg);font-weight:600;letter-spacing:-.01em;
+    color:var(--text-strong);line-height:1.25;margin:0}
+  .signup-dock-body{margin:0;color:var(--text-muted);font-size:var(--text-sm);
+    line-height:1.55}
+  .signup-dock-btn{margin-top:.75rem;white-space:nowrap;text-decoration:none;
+    background:var(--accent);color:#04181a;border:1px solid var(--accent);
+    font-weight:600;padding:.75rem 1.2rem;border-radius:var(--radius-md);
+    display:inline-flex;align-items:center;justify-content:center;gap:.4rem;
+    transition:all .18s ease}
+  .signup-dock-btn:hover{background:var(--accent-strong);border-color:var(--accent-strong);
     color:#04181a;text-decoration:none}
-  @media (max-width:680px){
-    .signup-cta{flex-direction:column;align-items:flex-start;gap:.9rem}
-    .signup-cta-btn{width:100%;justify-content:center}
+  @media (max-width:560px){
+    .signup-dock-panel{width:100vw}
+    .signup-dock.is-open .signup-dock-tab{right:100vw}
   }
 
   .stepper-tag{display:inline-flex;align-items:center;padding:.15rem .5rem;
@@ -426,12 +485,15 @@
     font-variant-numeric:tabular-nums}
   .verdict-tile-label{font-size:var(--text-xs);color:var(--text-muted);
     margin-top:.2rem;letter-spacing:.02em}
-  .verdict-tile-accent{width:28px;height:3px;border-radius:3px;margin-top:.4rem}
-  .verdict-tile[data-verdict="Directly reflected"] .verdict-tile-accent{background:var(--success)}
-  .verdict-tile[data-verdict="Partially reflected"] .verdict-tile-accent{background:var(--warning)}
-  .verdict-tile[data-verdict="Adjacent"] .verdict-tile-accent{background:var(--blue)}
-  .verdict-tile[data-verdict="Not reflected"] .verdict-tile-accent{background:var(--error)}
-  .verdict-tile[data-verdict="Unclear"] .verdict-tile-accent{background:var(--text-faint)}
+  /* Progress-bar style accent: full-width track along the bottom of each tile,
+     filled relative to the largest verdict count so a user sees at a glance
+     which category dominates. Same teal accent for every verdict — no more
+     per-verdict colour coding on the bubbles themselves. */
+  .verdict-tile-accent{width:100%;height:4px;border-radius:3px;margin-top:.55rem;
+    background:var(--surface-3);overflow:hidden;position:relative}
+  .verdict-tile-accent::after{content:"";position:absolute;left:0;top:0;bottom:0;
+    width:var(--fill,0%);background:var(--accent);border-radius:3px;
+    transition:width .35s ease}
   @media (max-width: 720px){
     .verdict-tiles{grid-template-columns:repeat(2,1fr)}
     .verdict-tile-count{font-size:1.25rem}
@@ -495,9 +557,9 @@
   /* Live countdown to Federal Budget — anchored top-right, understated so it
      doesn't fight the hero title. Numbers use tabular figures so the layout
      doesn't jitter as values tick. */
-  .budget-countdown{position:absolute;top:clamp(1.25rem,3vh,2rem);
+  .budget-countdown{position:fixed;top:clamp(1.25rem,3vh,2rem);
     right:clamp(1.25rem,3vw,2rem);display:flex;flex-direction:column;
-    align-items:flex-end;gap:.3rem;z-index:2;
+    align-items:flex-end;gap:.3rem;z-index:60;
     padding:.7rem .95rem;border-radius:var(--radius-md);
     background:hsla(222,35%,10%,0.55);border:1px solid hsla(0,0%,100%,0.10);
     backdrop-filter:blur(10px) saturate(130%);
@@ -543,19 +605,39 @@
 <body>
 <canvas id="starfield" aria-hidden="true"></canvas>
 
+<!-- Sign-up CTA dock — a vertical tab pinned to the right edge of the viewport.
+     Hidden until at least one ask has been evaluated. Clicking the tab slides
+     out a panel with the full pitch + sign-up button; clicking the tab again
+     (or the close button / backdrop) slides it back. -->
+<div class="signup-dock" id="signupDock" hidden>
+  <button type="button" class="signup-dock-tab" id="signupDockTab" aria-expanded="false" aria-controls="signupDockPanel">
+    <span class="signup-dock-tab-text">Get Budget Night access</span>
+  </button>
+  <aside class="signup-dock-panel" id="signupDockPanel" aria-hidden="true">
+    <button type="button" class="signup-dock-close" id="signupDockClose" aria-label="Close">×</button>
+    <div class="signup-dock-eyebrow">You're on the tester version</div>
+    <h3 class="signup-dock-title">Want this year's budget analysed live on the night?</h3>
+    <p class="signup-dock-body">Sign up to get a Budget Night link that pre-loads your submission and runs alignment analysis the moment the Papers drop.</p>
+    <a class="btn primary signup-dock-btn" id="signupCtaBtn" href="#">Sign up for Budget Night →</a>
+  </aside>
+</div>
+
+<!-- Live countdown to Federal Budget: 12 May 2026, 7:30 PM AEST (09:30 UTC).
+     Lives at the top level so it stays visible on both the welcome screen
+     and the main tool screen. Fixed-position, top-right. -->
+<div class="budget-countdown" id="budgetCountdown" aria-live="polite">
+  <span class="budget-countdown-label" id="budgetCountdownLabel">Federal Budget in</span>
+  <div class="budget-countdown-timer" id="budgetCountdownTimer">
+    <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="days">—</span><span class="budget-countdown-sub">days</span></div>
+    <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="hours">—</span><span class="budget-countdown-sub">hrs</span></div>
+    <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="minutes">—</span><span class="budget-countdown-sub">min</span></div>
+    <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="seconds">—</span><span class="budget-countdown-sub">sec</span></div>
+  </div>
+</div>
+
 <!-- Welcome landing screen. Shown only when a preset slug is in the URL and
      the hydration call succeeds with an org name. Dismissed by the Ready? CTA. -->
 <section class="welcome-screen" id="welcomeScreen" aria-labelledby="welcomeTitle">
-  <!-- Live countdown to Federal Budget: 12 May 2026, 7:30 PM AEST (09:30 UTC). -->
-  <div class="budget-countdown" id="budgetCountdown" aria-live="polite">
-    <span class="budget-countdown-label" id="budgetCountdownLabel">Federal Budget in</span>
-    <div class="budget-countdown-timer" id="budgetCountdownTimer">
-      <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="days">—</span><span class="budget-countdown-sub">days</span></div>
-      <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="hours">—</span><span class="budget-countdown-sub">hrs</span></div>
-      <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="minutes">—</span><span class="budget-countdown-sub">min</span></div>
-      <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="seconds">—</span><span class="budget-countdown-sub">sec</span></div>
-    </div>
-  </div>
   <div class="welcome-inner">
     <h1 class="welcome-title" id="welcomeTitle">Welcome <span class="welcome-org" id="welcomeOrg">friend</span></h1>
   </div>
@@ -653,6 +735,18 @@
           <button type="button" class="btn primary" id="evaluateBtn" disabled>Evaluate asks</button>
           <button type="button" class="btn" id="stopEvalBtn" style="display:none">Stop</button>
         </div>
+        <!-- Evaluation progress: indeterminate shimmer while preparing, then a
+             filling bar with "N of M asks evaluated" once per-ask work begins.
+             Aria-live polite so screen readers hear updates without spam. -->
+        <div class="eval-progress" id="evalProgress" hidden aria-live="polite">
+          <div class="eval-progress-head">
+            <span class="eval-progress-label" id="evalProgressLabel">Preparing evaluation…</span>
+            <span class="eval-progress-count" id="evalProgressCount"></span>
+          </div>
+          <div class="eval-progress-track" id="evalProgressTrack" data-mode="indeterminate">
+            <div class="eval-progress-fill" id="evalProgressFill" style="width:0%"></div>
+          </div>
+        </div>
         <!-- Hidden but preserved for the existing code paths. -->
         <span class="upload-status" id="evalStatus" style="display:none"></span>
         <span class="upload-status" id="insightsStatus" style="display:none"></span>
@@ -661,17 +755,9 @@
       </div>
     </div>
 
-    <!-- Sign-up CTA: only visible after at least one ask has been evaluated.
-         This tool is a tester so orgs can trial last year's budget; the CTA
-         invites them to sign up for this year's live analysis. -->
-    <div class="signup-cta" id="signupCta" hidden>
-      <div class="signup-cta-text">
-        <div class="signup-cta-eyebrow">You're on the tester version</div>
-        <div class="signup-cta-title">Want this year's budget analysed live on the night?</div>
-        <p class="signup-cta-body">Sign up to get a Budget Night link that pre-loads your submission and runs alignment analysis the moment the Papers drop.</p>
-      </div>
-      <a class="btn primary signup-cta-btn" id="signupCtaBtn" href="#">Sign up for Budget Night →</a>
-    </div>
+    <!-- Sign-up CTA is rendered at the body level as a right-edge slide-out
+         panel (see #signupDock below). Kept out of the page flow so the
+         analysis table doesn't get pushed around when it appears. -->
 
     <!-- Verdict-count tiles: click to filter register. Shown once asks exist. -->
     <div class="verdict-tiles" id="verdictTiles"></div>
@@ -897,6 +983,19 @@ function openModal(id) {
           ${e.anchor ? `<a href="${escapeHtml(e.anchor)}" target="_blank" rel="noopener noreferrer">Open source →</a>` : ''}
         </article>
       `).join('')}
+      ${row.verdict === 'Not reflected' && row.nextBestThing ? `
+        <div class="next-best">
+          <div class="next-best-label">Next best thing</div>
+          ${row.nextBestThing.title ? `<div class="next-best-title">${escapeHtml(row.nextBestThing.title)}</div>` : ''}
+          ${row.nextBestThing.summary ? `<p class="next-best-summary">${escapeHtml(row.nextBestThing.summary)}</p>` : ''}
+          ${(row.nextBestThing.source || row.nextBestThing.pdfPage) ? `
+            <div class="meta-row">
+              ${row.nextBestThing.source ? `<span>${escapeHtml(row.nextBestThing.source)}</span>` : ''}
+              ${row.nextBestThing.pdfPage ? `<span>PDF page ${escapeHtml(row.nextBestThing.pdfPage)}</span>` : ''}
+            </div>` : ''}
+          ${row.nextBestThing.quote ? `<div class="quote next-best-quote">${escapeHtml(row.nextBestThing.quote)}</div>` : ''}
+        </div>
+      ` : ''}
     </div>`
   ].join('');
 
@@ -918,6 +1017,27 @@ document.getElementById('modalClose').addEventListener('click', closeModal);
 document.getElementById('modalOverlay').addEventListener('click', e => {
   if (e.target.id === 'modalOverlay') closeModal();
 });
+
+// Sign-up dock: click the vertical tab to toggle the slide-out panel.
+// Close on X click, Esc, or outside-click. Keep it minimal to avoid conflicts
+// with the existing modal Esc handler.
+(function wireSignupDock(){
+  const dock = document.getElementById('signupDock');
+  const tab = document.getElementById('signupDockTab');
+  const closeBtn = document.getElementById('signupDockClose');
+  const panel = document.getElementById('signupDockPanel');
+  if (!dock || !tab || !closeBtn || !panel) return;
+  function setOpen(open){
+    dock.classList.toggle('is-open', open);
+    tab.setAttribute('aria-expanded', String(open));
+    panel.setAttribute('aria-hidden', String(!open));
+  }
+  tab.addEventListener('click', () => setOpen(!dock.classList.contains('is-open')));
+  closeBtn.addEventListener('click', () => setOpen(false));
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape' && dock.classList.contains('is-open')) setOpen(false);
+  });
+})();
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') closeModal();
 });
@@ -1418,7 +1538,8 @@ function rowsFromExtraction(extracted) {
     verdict: 'Not yet evaluated',
     plainIssue: 'No budget-response analysis has been run against this ask yet. Upload budget documents and click "Evaluate all asks" to assess alignment.',
     rule: 'Awaiting evaluation. This ask has been extracted from the uploaded submission but has not yet been checked against any budget document.',
-    evidenceItems: []
+    evidenceItems: [],
+    nextBestThing: null
   }));
 }
 
@@ -1486,6 +1607,35 @@ function setEvalStatus(msg, kind) {
   const el = document.getElementById('evalStatus');
   el.className = 'upload-status' + (kind ? ' ' + kind : '');
   el.textContent = msg;
+}
+
+// Visual progress bar for Evaluate. Three modes:
+//   showEvalProgress('indeterminate', label)  — shimmer, used while preparing
+//   showEvalProgress('determinate', label, done, total)  — filling bar
+//   hideEvalProgress()  — hides the bar (after completion or on reset)
+function showEvalProgress(mode, label, done, total) {
+  const root = document.getElementById('evalProgress');
+  const track = document.getElementById('evalProgressTrack');
+  const fill = document.getElementById('evalProgressFill');
+  const lab = document.getElementById('evalProgressLabel');
+  const cnt = document.getElementById('evalProgressCount');
+  if (!root) return;
+  root.hidden = false;
+  if (label) lab.textContent = label;
+  if (mode === 'indeterminate') {
+    track.setAttribute('data-mode', 'indeterminate');
+    cnt.textContent = '';
+  } else {
+    track.setAttribute('data-mode', 'determinate');
+    const t = Math.max(1, total|0);
+    const d = Math.max(0, Math.min(t, done|0));
+    fill.style.width = Math.round((d / t) * 100) + '%';
+    cnt.textContent = `${d} of ${t}`;
+  }
+}
+function hideEvalProgress() {
+  const root = document.getElementById('evalProgress');
+  if (root) root.hidden = true;
 }
 
 function updateEvaluateButtonState() {
@@ -1818,7 +1968,8 @@ Return ONLY a JSON object matching this schema exactly:
       "quote": "verbatim excerpt from the budget text (1-3 sentences max)",
       "note": "1 sentence explaining how this relates to the ask"
     }
-  ]
+  ],
+  "nextBestThing": null OR { "title": "short name of the closest budget measure", "summary": "1-2 sentence plain-English summary of the closest thing in the budget to the intent of this ask (different mechanism, narrower cohort, adjacent problem area) and how it falls short", "source": "document name", "pdfPage": "page number as string", "quote": "verbatim snippet (1-2 sentences) from the budget text" }
 }
 
 Verdict definitions:
@@ -1832,6 +1983,7 @@ Rules:
 - Only cite evidence you can quote verbatim from the BUDGET EVIDENCE text above. Do not invent measures.
 - If nothing addresses the ask, return verdict "Not reflected" and an empty evidenceItems array.
 - quote must be a verbatim snippet from the budget text, not a paraphrase.
+- nextBestThing: set to null UNLESS verdict is "Not reflected". When verdict is "Not reflected", try to find the single closest budget measure to the *intent* of the ask (adjacent problem area, different mechanism, narrower cohort, cost-of-living support covering a similar population, etc.) and populate nextBestThing with a short title, a 1-2 sentence plain-English summary of how it relates and where it falls short of the ask, plus a verbatim quote with source and page. If genuinely nothing in the budget comes close, set nextBestThing to null.
 - Return ONLY the JSON object. No prose, no code fences.`;
 }
 
@@ -1865,6 +2017,22 @@ function applyEvaluationToRow(row, result) {
     quote: String(e.quote || '').trim(),
     note: String(e.note || '').trim()
   })) : [];
+  // Only retain nextBestThing for Not reflected verdicts; silently ignore
+  // malformed or missing payloads so the rest of the evaluation still lands.
+  if (row.verdict === 'Not reflected' && result.nextBestThing && typeof result.nextBestThing === 'object') {
+    const nb = result.nextBestThing;
+    row.nextBestThing = {
+      title: String(nb.title || '').trim(),
+      summary: String(nb.summary || '').trim(),
+      source: String(nb.source || '').trim(),
+      pdfPage: String(nb.pdfPage || '').trim(),
+      quote: String(nb.quote || '').trim(),
+    };
+    // Drop entirely if the model returned only empty strings.
+    if (!row.nextBestThing.summary && !row.nextBestThing.quote) row.nextBestThing = null;
+  } else {
+    row.nextBestThing = null;
+  }
 }
 
 document.getElementById('evaluateBtn').addEventListener('click', async () => {
@@ -1873,6 +2041,7 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   const stopBtn = document.getElementById('stopEvalBtn');
   btn.disabled = true;
   stopBtn.style.display = '';
+  showEvalProgress('indeterminate', 'Preparing evaluation…');
   evalAbortController = new AbortController();
   const signal = evalAbortController.signal;
   const totalRaw = budgetDocs.reduce((n, d) => n + d.totalChars, 0);
@@ -1887,11 +2056,13 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   let pageIndex = null;
   if (useRelevance) {
     setEvalStatus(`Indexing ${totalPagesAll} budget pages for per-ask relevance scoring…`, 'working');
+    showEvalProgress('indeterminate', `Indexing ${totalPagesAll} budget pages…`);
     pageIndex = buildBudgetPageIndex();
     setEvalStatus(`Ready: ${rows.length} asks will each be evaluated against their most relevant pages from ${totalPagesAll} total budget pages (${totalRaw.toLocaleString()} chars). Every page is reachable for some ask.`, 'working');
   } else {
     sharedCorpus = buildBudgetCorpus();
     setEvalStatus(`Starting evaluation of ${rows.length} asks against ${sharedCorpus.length.toLocaleString()} chars of budget text…`, 'working');
+    showEvalProgress('indeterminate', 'Preparing budget text…');
   }
 
   // Only evaluate rows that haven't been successfully evaluated yet — so re-clicking
@@ -1902,6 +2073,7 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
     setEvalStatus(`All ${rows.length} asks are already evaluated. Clear individual verdicts to re-run.`, 'ok');
     btn.disabled = false;
     stopBtn.style.display = 'none';
+    hideEvalProgress();
     return;
   }
   if (alreadyDone) {
@@ -1922,6 +2094,8 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
     try {
       const elapsed = Math.round((Date.now() - startedAt) / 1000);
       setEvalStatus(`Evaluating ${processed}/${pendingRows.length}: "${row.ask.slice(0, 80)}…" · ${elapsed}s elapsed`, 'working');
+      // Determinate progress: count asks completed so far (processed-1 is in flight).
+      showEvalProgress('determinate', `Evaluating ask ${processed} of ${pendingRows.length}…`, processed - 1, pendingRows.length);
       const input = useRelevance ? pageIndex : sharedCorpus;
       const { result, coverage } = await evaluateOneAsk(row, input, signal, (msg) => {
         setEvalStatus(`Evaluating ${processed}/${pendingRows.length} — ${msg}`, 'working');
@@ -1930,6 +2104,7 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
       if (coverage) row.coverage = coverage;
       succeeded++;
       pagesReached = Math.max(pagesReached, unionPageCount(coveragesSeen, coverage));
+      showEvalProgress('determinate', `Evaluated ${processed} of ${pendingRows.length}`, processed, pendingRows.length);
       render();
     } catch (err) {
       // Only honour user-initiated abort — server timeouts / dropped fetches also throw AbortError
@@ -1942,6 +2117,9 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   }
   stopBtn.style.display = 'none';
   btn.disabled = false;
+  // Hide the progress bar a moment after completion so users see the final
+  // state before it disappears; on abort/error we hide immediately.
+  setTimeout(() => hideEvalProgress(), 1400);
   const totalElapsed = Math.round((Date.now() - startedAt) / 1000);
   const skipped = pendingRows.length - processed;
   const totalEvaluated = rows.filter(r => r.verdict !== 'Not yet evaluated').length;
@@ -2168,20 +2346,28 @@ function renderVerdictTiles() {
   const host = document.getElementById('verdictTiles');
   if (!host) return;
   const anyEvaluated = rows.some(r => r.verdict && r.verdict !== 'Not yet evaluated');
-  // Toggle the sign-up CTA in lock-step with the tiles' visibility.
-  const cta = document.getElementById('signupCta');
-  if (cta) cta.hidden = !anyEvaluated;
+  // Toggle the sign-up dock in lock-step with the tiles' visibility.
+  const dock = document.getElementById('signupDock');
+  if (dock) {
+    dock.hidden = !anyEvaluated;
+    if (!anyEvaluated) dock.classList.remove('is-open');
+  }
   if (!anyEvaluated) { host.classList.remove('is-visible'); host.innerHTML = ''; return; }
   const counts = Object.fromEntries(VERDICTS.map(v => [v, 0]));
   rows.forEach(r => { if (counts[r.verdict] !== undefined) counts[r.verdict]++; });
   const active = state.filters.verdict;
-  host.innerHTML = VERDICTS.map(v => `
+  // Fill each tile's progress bar relative to the highest verdict count so the
+  // dominant category is visually obvious. Zero-count tiles show an empty bar.
+  const maxCount = Math.max(1, ...VERDICTS.map(v => counts[v]));
+  host.innerHTML = VERDICTS.map(v => {
+    const pct = Math.round((counts[v] / maxCount) * 100);
+    return `
     <button type="button" class="verdict-tile${active === v ? ' is-active' : ''}" data-verdict="${escapeHtml(v)}">
       <span class="verdict-tile-count">${counts[v]}</span>
       <span class="verdict-tile-label">${escapeHtml(v)}</span>
-      <span class="verdict-tile-accent"></span>
-    </button>
-  `).join('');
+      <span class="verdict-tile-accent" style="--fill:${pct}%" aria-hidden="true"></span>
+    </button>`;
+  }).join('');
   host.classList.add('is-visible');
   host.querySelectorAll('.verdict-tile').forEach(tile => {
     tile.addEventListener('click', () => {
@@ -2667,7 +2853,8 @@ function rowsFromPreset(preset) {
     verdict: 'Not yet evaluated',
     plainIssue: 'No budget-response analysis has been run against this ask yet. Upload budget documents and click "Evaluate all asks" to assess alignment.',
     rule: 'Awaiting evaluation. This ask has been extracted from the uploaded submission but has not yet been checked against any budget document.',
-    evidenceItems: []
+    evidenceItems: [],
+    nextBestThing: null
   })).filter(r => r.ask);
 }
 
@@ -2762,8 +2949,8 @@ hydrateFromPreset();
   }
   function seed(){
     stars=[];
-    var target=Math.round((w*h)/9000); // density
-    target=Math.max(120,Math.min(260,target));
+    var target=Math.round((w*h)/6500); // density (slightly denser starfield)
+    target=Math.max(180,Math.min(360,target));
     for(var i=0;i<target;i++){
       var tint=Math.random();
       var hue= tint<0.08 ? 172 : tint<0.14 ? 45 : 220; // mostly white, a few teal/gold
@@ -2772,8 +2959,8 @@ hydrateFromPreset();
       stars.push({
         x:Math.random()*w,
         y:Math.random()*h,
-        r:Math.random()*1.1+0.25,
-        base:0.35+Math.random()*0.55,
+        r:Math.random()*1.2+0.3,
+        base:0.45+Math.random()*0.55,
         phase:Math.random()*Math.PI*2,
         speed:0.0004+Math.random()*0.0012,
         hue:hue, sat:sat, light:light
