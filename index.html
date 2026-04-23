@@ -1678,22 +1678,75 @@ document.getElementById('insightsBtn').addEventListener('click', async () => {
   const totalRawInsights = budgetDocs.reduce((n, d) => n + d.totalChars, 0);
   const startedAt = Date.now();
 
+  // Helper: run a list of sweeps, tolerating per-sweep failures so one timeout
+  // doesn't nuke the whole run. Returns { merged, failed } where failed is the
+  // list of sweep labels that didn't complete after all retries.
+  async function runSweeps(sweeps, labelPrefix) {
+    const merged = { unaskedPriorities: [], risks: [] };
+    const failed = [];
+    for (let i = 0; i < sweeps.length; i++) {
+      if (signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+      const sweep = sweeps[i];
+      setInsightsStatus(`${labelPrefix}${i + 1}/${sweeps.length}: scanning ${sweep.label} (${sweep.corpus.length.toLocaleString()} chars)…`, 'working');
+      const prompt = enforcePromptCeiling(buildInsightsPrompt(focusContext, sweep.corpus), `Insights prompt (sweep ${i + 1})`);
+      try {
+        const part = await geminiFetchWithRetry(
+          {
+            prompt,
+            temperature: 0.3,
+            signal,
+            onTick: (s) => setInsightsStatus(`${labelPrefix}${i + 1}/${sweeps.length} (${sweep.label})… ${s}s elapsed`, 'working'),
+          },
+          (msg) => setInsightsStatus(`${labelPrefix}${i + 1}/${sweeps.length}: ${msg}`, 'working')
+        );
+        if (Array.isArray(part?.unaskedPriorities)) merged.unaskedPriorities.push(...part.unaskedPriorities);
+        if (Array.isArray(part?.risks)) merged.risks.push(...part.risks);
+      } catch (err) {
+        // User cancel still aborts the whole thing.
+        if (err.name === 'AbortError') throw err;
+        // Any other failure (timeout, 5xx after retries) — log and continue.
+        console.warn(`Sweep ${i + 1} (${sweep.label}) failed:`, err.message);
+        failed.push(sweep.label);
+      }
+    }
+    return { merged, failed };
+  }
+
   try {
     let parsed;
+    let failedSweeps = [];
+    let sweepMode = false;
     if (totalRawInsights <= BUDGET_CORPUS_MAX_CHARS) {
       // Fits in one call — fast path.
       const corpus = buildBudgetCorpus();
       const prompt = enforcePromptCeiling(buildInsightsPrompt(focusContext, corpus), 'Insights prompt');
       setInsightsStatus(`Generating insights against ${corpus.length.toLocaleString()} chars of budget text… (typically 45-90s)`, 'working');
-      parsed = await geminiFetchWithRetry(
-        {
-          prompt,
-          temperature: 0.3,
-          signal,
-          onTick: (s) => setInsightsStatus(`Generating insights… ${s}s elapsed`, 'working'),
-        },
-        (msg) => setInsightsStatus(`Insights: ${msg}`, 'working')
-      );
+      try {
+        parsed = await geminiFetchWithRetry(
+          {
+            prompt,
+            temperature: 0.3,
+            signal,
+            onTick: (s) => setInsightsStatus(`Generating insights… ${s}s elapsed`, 'working'),
+          },
+          (msg) => setInsightsStatus(`Insights: ${msg}`, 'working')
+        );
+      } catch (err) {
+        if (err.name === 'AbortError') throw err;
+        // Single-pass failed — don't surrender. Automatically fall back to
+        // sweep mode on half-size chunks so we still get partial coverage.
+        console.warn('Single-pass insights failed, falling back to sweeps:', err.message);
+        const fallbackCap = Math.max(60000, Math.floor(BUDGET_CORPUS_MAX_CHARS / 2));
+        const sweeps = planInsightsSweeps(fallbackCap);
+        setInsightsStatus(`Single pass didn't complete — retrying in ${sweeps.length} smaller sweeps…`, 'working');
+        sweepMode = true;
+        const { merged, failed } = await runSweeps(sweeps, 'Sweep ');
+        failedSweeps = failed;
+        parsed = {
+          unaskedPriorities: dedupeInsightItems(merged.unaskedPriorities),
+          risks: dedupeInsightItems(merged.risks),
+        };
+      }
     } else {
       // Multi-sweep path: split the budget into contiguous sweeps that each fit
       // under the per-call cap, run insights on each, merge + dedupe so no
@@ -1701,37 +1754,30 @@ document.getElementById('insightsBtn').addEventListener('click', async () => {
       // long doc.
       const sweeps = planInsightsSweeps(BUDGET_CORPUS_MAX_CHARS);
       setInsightsStatus(`Budget is ${totalRawInsights.toLocaleString()} chars across ${budgetDocs.reduce((n,d)=>n+d.pages.length,0)} pages — too large for one pass. Running ${sweeps.length} sweeps to cover the full document…`, 'working');
-      const merged = { unaskedPriorities: [], risks: [] };
-      for (let i = 0; i < sweeps.length; i++) {
-        if (signal.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
-        const sweep = sweeps[i];
-        setInsightsStatus(`Sweep ${i + 1}/${sweeps.length}: scanning ${sweep.label} (${sweep.corpus.length.toLocaleString()} chars)…`, 'working');
-        const prompt = enforcePromptCeiling(buildInsightsPrompt(focusContext, sweep.corpus), `Insights prompt (sweep ${i + 1})`);
-        const part = await geminiFetchWithRetry(
-          {
-            prompt,
-            temperature: 0.3,
-            signal,
-            onTick: (s) => setInsightsStatus(`Sweep ${i + 1}/${sweeps.length} (${sweep.label})… ${s}s elapsed`, 'working'),
-          },
-          (msg) => setInsightsStatus(`Sweep ${i + 1}/${sweeps.length}: ${msg}`, 'working')
-        );
-        if (Array.isArray(part?.unaskedPriorities)) merged.unaskedPriorities.push(...part.unaskedPriorities);
-        if (Array.isArray(part?.risks)) merged.risks.push(...part.risks);
-      }
+      sweepMode = true;
+      const { merged, failed } = await runSweeps(sweeps, 'Sweep ');
+      failedSweeps = failed;
       parsed = {
         unaskedPriorities: dedupeInsightItems(merged.unaskedPriorities),
         risks: dedupeInsightItems(merged.risks),
       };
     }
+    // If EVERY sweep failed in sweep mode, treat that as an actual failure
+    // rather than showing an empty-insights card.
+    if (sweepMode && failedSweeps.length && !parsed.unaskedPriorities.length && !parsed.risks.length) {
+      throw new Error('All sweeps failed after retries. Please try again in a minute — if it keeps failing, try a shorter strategic plan or focus brief.');
+    }
     renderInsights(parsed);
     const totalElapsed = Math.round((Date.now() - startedAt) / 1000);
     const pCount = parsed?.unaskedPriorities?.length || 0;
     const rCount = parsed?.risks?.length || 0;
-    const coverageNote = totalRawInsights > BUDGET_CORPUS_MAX_CHARS
+    const partialNote = failedSweeps.length
+      ? ` · ${failedSweeps.length} of the sweeps didn't complete (${failedSweeps.join(', ')}) — results are from the remaining sweeps. You can re-run insights to try again.`
+      : '';
+    const coverageNote = sweepMode && !failedSweeps.length
       ? ` · full budget covered across multiple sweeps (no pages dropped).`
       : '';
-    setInsightsStatus(`Insights generated in ${totalElapsed}s · ${pCount} unasked priorities, ${rCount} risks.${coverageNote}`, 'ok');
+    setInsightsStatus(`Insights generated in ${totalElapsed}s · ${pCount} unasked priorities, ${rCount} risks.${coverageNote}${partialNote}`, failedSweeps.length ? 'working' : 'ok');
   } catch (err) {
     if (err.name !== 'AbortError') {
       console.error(err);
