@@ -1720,10 +1720,13 @@ document.getElementById('clearBudgetBtn').addEventListener('click', () => {
   if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
 });
 
-// Maximum budget corpus size we send to Gemini.
-// 150k chars ≈ ~40k tokens. Keeps prompt well under the 90s single-call window
-// even with extraction/eval prompt scaffolding and long ask text.
-const BUDGET_CORPUS_MAX_CHARS = 150000;
+// Maximum budget corpus size we send to the AI per ask.
+// 60k chars ≈ ~16k tokens. Tight enough that the model actually *reads* the
+// evidence rather than glossing over a needle buried in 150k+ of haystack
+// ("lost in the middle" attention dilution). The per-ask TF-IDF relevance
+// ranker still picks the best ~20 pages, which typically covers what any
+// single ask could plausibly match.
+const BUDGET_CORPUS_MAX_CHARS = 60000;
 // Hard ceiling on the entire prompt (corpus + scaffolding + user inputs).
 // Gemini 2.5 Flash handles far larger inputs in theory, but wall-clock time
 // grows superlinearly past ~400k chars and trips the Worker's 90s first-attempt.
@@ -2153,6 +2156,16 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
       console.error('Evaluation failed for row', row.id, err);
       failed++;
       failures.push({ ask: row.ask.slice(0, 80), reason: err.name === 'AbortError' ? 'timed out, will retry on next click' : (err.message || 'unknown error') });
+    }
+    // Space calls out by ~3s so we stay under both providers' per-minute
+    // rate limits when asks run back-to-back. Skipped after the last ask and
+    // if the user aborts mid-run. Adds ~30s to a 10-ask evaluation, negligible
+    // versus the several minutes each ask already takes.
+    if (processed < pendingRows.length && !signal.aborted) {
+      await new Promise(resolve => {
+        const timer = setTimeout(resolve, 3000);
+        signal.addEventListener('abort', () => { clearTimeout(timer); resolve(); }, { once: true });
+      });
     }
   }
   stopBtn.style.display = 'none';
