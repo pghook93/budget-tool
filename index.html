@@ -2607,10 +2607,10 @@ Return ONLY a JSON object matching this schema exactly:
       "amount": "dollar figure as written in the budget, e.g. '$50.0 million over 4 years' or 'not costed'",
       "source": "document name (exact from the === markers)",
       "pdfPage": "page number as string",
-      "priorityArea": "which of the organisation's strategic priority areas this touches (short phrase, drawn from the strategic focus/plan — NOT from submission asks)",
-      "summary": "1-2 sentences describing what the measure does, in plain English",
-      "whyItMatters": "1-2 sentences explaining why this matters to this organisation given their strategic priorities. Do NOT reference their submission or asks — speak about their strategy, populations, and policy areas.",
-      "quote": "verbatim excerpt from the budget text (1-3 sentences max)"
+      "priorityArea": "which strategic priority area this touches (short phrase)",
+      "summary": "ONE sentence, max 30 words, describing what the measure does in plain English",
+      "whyItMatters": "ONE sentence, max 30 words, on why this matters to the organisation's strategy. Never mention \"asks\" or the submission.",
+      "quote": "ONE verbatim sentence from the budget text, max 40 words"
     }
   ],
   "risks": [
@@ -2619,10 +2619,10 @@ Return ONLY a JSON object matching this schema exactly:
       "amount": "dollar figure as written in the budget, or 'not costed'",
       "source": "document name (exact from the === markers)",
       "pdfPage": "page number as string",
-      "priorityArea": "which of the organisation's strategic priority areas this threatens (short phrase)",
-      "summary": "1-2 sentences describing the measure",
-      "whyItMatters": "1-2 sentences explaining why this undercuts the organisation's strategic position. Speak about their strategy and the populations they serve — do NOT reference their submission or asks.",
-      "quote": "verbatim excerpt from the budget text (1-3 sentences max)"
+      "priorityArea": "which strategic priority this threatens (short phrase)",
+      "summary": "ONE sentence, max 30 words, describing the measure",
+      "whyItMatters": "ONE sentence, max 30 words, on why this undercuts the organisation's strategic position. Never mention \"asks\" or the submission.",
+      "quote": "ONE verbatim sentence from the budget text, max 40 words"
     }
   ]
 }
@@ -2634,7 +2634,8 @@ Rules:
 - Only include budget measures genuinely relevant to the organisation's strategic priorities. Do not pad with generic measures.
 - "unaskedPriorities" = budget measures the organisation would likely welcome, engage with, or want to capitalise on — things aligned with their strategy.
 - "risks" = budget measures that cut against the organisation's strategic position (reforms that undercut their advocacy, cuts to relevant programs, shifts that complicate service delivery, etc.).
-- Aim for 5-12 items per category. Fewer is fine if there's genuinely less to flag. Empty array is valid.
+- Return AT MOST 6 items per category. Pick only the most significant. Empty array is valid if nothing qualifies.
+- Keep every string field as short as possible. Favour brevity over completeness. A truncated JSON response is useless — terse but complete is the goal.
 - All quotes must be verbatim from the budget text. Do not invent measures or figures.
 - Sort each list by how significant the item is (most significant first).
 - Return ONLY the JSON object. No prose, no code fences.`;
