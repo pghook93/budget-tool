@@ -95,6 +95,16 @@
   function cleanOverarching(s) {
     if (!s) return 'Uncategorised';
     var out = String(s).trim();
+    // Strip leading list numbering like "2. Raise International Aid...",
+    // "3) Fund X", "4 \u2014 Establish Y". These come from PDF layout ordinals
+    // that often don't match the true ask sequence, so they cause confusion
+    // (e.g. ask labelled "2." actually being the 1st ask in its section).
+    // Also strip "Recommendation 3:" / "Rec 3." style prefixes.
+    out = out.replace(
+      /^(?:recommendation|rec\.?)\s*\d+\s*[:.\-\u2013\u2014)]?\s+/i,
+      ''
+    );
+    out = out.replace(/^\d+\s*[.)\-\u2013\u2014:]\s*/, '');
     out = out.replace(
       /^(?:our\s+|summary\s+of\s+|major\s+|key\s+)?recommendation[s:]*\s+(?:at\s+a\s+glance\s+)?/i,
       ''
