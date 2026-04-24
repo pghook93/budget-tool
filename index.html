@@ -634,7 +634,7 @@
   }
 </style>
 <!-- BUILD_STAMP: replaced with commit SHA at deploy time for cache-busting -->
-<script src="shared.js?v=721f41d"></script>
+<script src="shared.js?v=BUILD_STAMP"></script>
 <script>
 // Early-run: if the URL carries a preset slug, tag <html> so CSS can hide the
 // tool underneath and show the welcome screen immediately — prevents any
@@ -691,7 +691,7 @@
   <div class="welcome-footer">
     <span class="welcome-footer-label">Powered by</span>
     <span class="welcome-footer-brand">PolicyPatch</span>
-    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build 721f41d</span>
+    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build BUILD_STAMP</span>
   </div>
 </section>
 
@@ -2918,22 +2918,18 @@ function renderInsights(data) {
 
   function renderCategory(items, kind, heading, extraClass) {
     if (!items.length) return '';
-    const groups = groupByPriority(items);
-    const groupsHtml = groups.map(g => `
-      <details class="insights-subgroup" open>
-        <summary class="insights-subgroup-head">
-          <span>${escapeHtml(g.label)}</span>
-          <span class="count-chip">${g.items.length}</span>
-        </summary>
-        <div class="insights-subgroup-body">
-          ${g.items.map(it => cardHtml(it, kind)).join('')}
-        </div>
-      </details>
-    `).join('');
+    // Sort items by their canonical priority so same-area cards sit together.
+    // No subgroup wrappers or counts — the priority tag on each card is the
+    // grouping cue. Keeps the section tight and scannable.
+    const sorted = [...items].sort((a, b) => {
+      const ca = canonicalisePriority(a.priorityArea);
+      const cb = canonicalisePriority(b.priorityArea);
+      return ca.localeCompare(cb);
+    });
     return `
       <div class="insights-group ${extraClass || ''}">
-        <h3>${heading}<span class="count-chip">${items.length}</span></h3>
-        ${groupsHtml}
+        <h3>${heading}</h3>
+        ${sorted.map(it => cardHtml(it, kind)).join('')}
       </div>
     `;
   }
