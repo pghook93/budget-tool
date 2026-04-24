@@ -633,8 +633,8 @@
     .budget-countdown-unit{min-width:1.75rem}
   }
 </style>
-<!-- e1723f4: replaced with commit SHA at deploy time for cache-busting -->
-<script src="shared.js?v=e1723f4e1723f4"></script>
+<!-- BUILD_STAMP: replaced with commit SHA at deploy time for cache-busting -->
+<script src="shared.js?v=BUILD_STAMPBUILD_STAMP"></script>
 <script>
 // Early-run: if the URL carries a preset slug, tag <html> so CSS can hide the
 // tool underneath and show the welcome screen immediately — prevents any
@@ -691,7 +691,7 @@
   <div class="welcome-footer">
     <span class="welcome-footer-label">Powered by</span>
     <span class="welcome-footer-brand">PolicyPatch</span>
-    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build e1723f4</span>
+    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build BUILD_STAMP</span>
   </div>
 </section>
 
@@ -2741,7 +2741,24 @@ FIELD RULES:
 - title: short name of the measure.
 - amount: dollar figure as written (e.g. "$50.0 million over 4 years"), or "not costed". MUST match a figure in the quote. If a heading figure and a sentence figure disagree, use the sentence figure.
 - source + pdfPage: exact document name and page from the === markers in the budget evidence.
-- priorityArea: a SHORT (2-4 word) category label, title case, that this measure falls under. Examples: "Housing", "Mental health", "First Nations", "Employment", "Child protection". Be consistent across items — reuse the same label for related measures so they group together. Never a full sentence or long phrase.
+- priorityArea: you MUST pick one label from this CLOSED LIST — do not invent new ones, do not use synonyms, do not split into sub-categories. Each measure gets exactly one label. Map to the single best fit; if multiple could apply, pick the primary focus of the measure.
+  Allowed labels (use the exact casing shown):
+  • "Housing & Homelessness" — social/public/affordable housing, homelessness, rent assistance, tenancy support
+  • "Income Support" — JobSeeker, Youth Allowance, pensions, payment indexation, cost-of-living relief to households
+  • "Mental Health" — mental health services, suicide prevention, psychological support
+  • "Health" — Medicare, bulk billing, hospitals, chronic disease, primary care, pharmaceuticals, health workforce (anything health that is not mental health)
+  • "Aged Care" — aged care services, Home Care Packages, aged care workforce, Aged Care Act transition
+  • "Disability" — NDIS, disability employment, disability inclusion, foundational supports
+  • "First Nations" — any measure specifically for Aboriginal and Torres Strait Islander peoples, Closing the Gap, ACCOs, Justice Reinvestment, Indigenous procurement
+  • "Children & Young People" — child protection, youth justice, early childhood, schools, out-of-home care, child wellbeing
+  • "Violence Prevention" — family/domestic/sexual violence, child sexual abuse, online safety, women's safety
+  • "Employment & Training" — employment services, apprenticeships, skills, VET, pathways to work, workforce participation (use this for ALL employment/training/skills measures; do NOT create separate "Employment", "Employment Pathways", "Skills", or "Apprenticeships" groups)
+  • "Community Services" — community sector funding, grant indexation, peak bodies, not-for-profit sustainability, capacity building
+  • "Justice & Safety" — criminal justice, policing, courts, legal assistance (non-Indigenous-specific; use First Nations for Justice Reinvestment)
+  • "Settlement & Migration" — refugee support, settlement services, SETS, humanitarian visas, multicultural affairs
+  • "Climate & Disaster" — disaster resilience, climate adaptation, emergency response, Disaster Ready Fund, extreme heat
+  • "Gender Equality" — women's economic equality, gender pay gap, paid parental leave, women's health (use Violence Prevention for DFSV)
+  • "Other" — ONLY if no label above reasonably fits; prefer any of the above if it plausibly applies.
 - summary: ONE sentence, max 30 words.
 - whyItMatters: ONE sentence, max 30 words, on why this matters to the organisation's strategy.
 - quote: ONE verbatim descriptive sentence from the budget text (15-40 words, contains a verb and describes what the measure does). Never use a heading, program name, or short title fragment. Omit the field if no such sentence exists.
@@ -2815,17 +2832,42 @@ function renderInsights(data) {
     `;
   }
 
-  // Group cards by priorityArea within each category so users can scan by
-  // theme (e.g. "Housing", "Mental Health") rather than a long flat list.
-  // The AI produces inconsistent casing/phrasing, so normalise the key while
-  // preserving the first-seen label for display.
+  // Group cards by priorityArea. The prompt defines a closed list of labels,
+  // but the AI sometimes drifts ("Employment" vs "Employment & Training",
+  // "First Peoples" vs "First Nations"). Fold synonyms back to the canonical
+  // label so related items merge into one group instead of fragmenting.
+  const PRIORITY_CANON = [
+    { canon: 'Housing & Homelessness', match: /\b(housing|homeless|tenanc|rent(al)?|accommodation)\b/i },
+    { canon: 'Income Support',         match: /\b(income support|jobseeker|youth allowance|pension|payment indexation|social security|cost[- ]of[- ]living|welfare payments?)\b/i },
+    { canon: 'Mental Health',          match: /\b(mental health|suicide|psychological|psychosocial)\b/i },
+    { canon: 'Aged Care',              match: /\b(aged care|older australians|home care packages?)\b/i },
+    { canon: 'Disability',             match: /\b(disabilit|ndis|ilc|foundational supports?)\b/i },
+    { canon: 'First Nations',          match: /\b(first nations?|indigenous|aboriginal|torres strait|closing the gap|acco|first peoples?)\b/i },
+    { canon: 'Children & Young People',match: /\b(child(ren)?|youth|young people|early childhood|schools?|out[- ]of[- ]home|child wellbeing|child protection)\b/i },
+    { canon: 'Violence Prevention',    match: /\b(violence|dfsv|family violence|domestic violence|sexual violence|sexual abuse|online safety|women'?s safety)\b/i },
+    { canon: 'Employment & Training',  match: /\b(employ|apprentic|skills|vet|training|workforce|jobseeker services?|pathways to (work|employment)|trainee)\b/i },
+    { canon: 'Community Services',     match: /\b(community (sector|services)|peak body|not[- ]for[- ]profit|nfp|grant indexation|capacity building)\b/i },
+    { canon: 'Justice & Safety',       match: /\b(justice|policing|courts?|legal (aid|assistance)|criminal|corrections?)\b/i },
+    { canon: 'Settlement & Migration', match: /\b(settlement|refugee|humanitarian|migration|multicultural|sets)\b/i },
+    { canon: 'Climate & Disaster',     match: /\b(disaster|climate|bushfire|emergency|resilience|extreme heat|flood)\b/i },
+    { canon: 'Gender Equality',        match: /\b(gender|women'?s (health|economic|equity|equality)|paid parental leave|pay gap)\b/i },
+    { canon: 'Health',                 match: /\b(medicare|bulk billing|hospital|primary care|pharmaceutical|pbs|health workforce|chronic disease|health)\b/i },
+  ];
+  function canonicalisePriority(raw) {
+    const s = String(raw || '').trim();
+    if (!s) return 'Other';
+    // Exact match to a canonical label wins.
+    for (const row of PRIORITY_CANON) if (row.canon.toLowerCase() === s.toLowerCase()) return row.canon;
+    // Otherwise fold via keyword patterns. First match wins (ordered most-specific first).
+    for (const row of PRIORITY_CANON) if (row.match.test(s)) return row.canon;
+    return 'Other';
+  }
   function groupByPriority(items) {
     const groups = new Map();
     for (const it of items) {
-      const raw = (it.priorityArea || 'Other').trim();
-      const key = raw.toLowerCase().replace(/\s+/g, ' ');
-      if (!groups.has(key)) groups.set(key, { label: raw, items: [] });
-      groups.get(key).items.push(it);
+      const canon = canonicalisePriority(it.priorityArea);
+      if (!groups.has(canon)) groups.set(canon, { label: canon, items: [] });
+      groups.get(canon).items.push(it);
     }
     // Sort groups largest-first for visual density; single-item groups drift
     // to the bottom but stay visible.
