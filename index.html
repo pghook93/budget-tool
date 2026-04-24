@@ -633,8 +633,8 @@
     .budget-countdown-unit{min-width:1.75rem}
   }
 </style>
-<!-- cf7c023: replaced with commit SHA at deploy time for cache-busting -->
-<script src="shared.js?v=cf7c023cf7c023"></script>
+<!-- BUILD_STAMP: replaced with commit SHA at deploy time for cache-busting -->
+<script src="shared.js?v=BUILD_STAMPBUILD_STAMP"></script>
 <script>
 // Early-run: if the URL carries a preset slug, tag <html> so CSS can hide the
 // tool underneath and show the welcome screen immediately — prevents any
@@ -691,7 +691,7 @@
   <div class="welcome-footer">
     <span class="welcome-footer-label">Powered by</span>
     <span class="welcome-footer-brand">PolicyPatch</span>
-    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build cf7c023</span>
+    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build BUILD_STAMP</span>
   </div>
 </section>
 
@@ -2170,11 +2170,21 @@ Return ONLY a JSON object matching this schema exactly:
 }
 
 Verdict definitions:
-- "Directly reflected": budget contains a named measure that matches this ask in scope, mechanism, and roughly the scale requested. Use this only when the match is strong and unambiguous.
-- "Partially reflected": budget contains a named measure that addresses part of this ask (smaller scale, narrower cohort, extension rather than expansion, etc).
-- "Adjacent": budget contains measures that address the same problem area but not the specific ask (different mechanism, different cohort, or cost-of-living relief rather than the structural change sought).
+- "Directly reflected": the budget contains a named measure that matches this ask on ALL THREE of scope, mechanism, and scale. Use this only when the match is strong and unambiguous across all three dimensions.
+- "Partially reflected": the budget contains a named measure that uses the same mechanism the ask proposes, but falls short on scope (narrower cohort or sector), scale (materially smaller funding), or is an extension rather than the expansion requested.
+- "Adjacent": the budget contains measures that address the same problem area but not the specific ask — different mechanism, different cohort, or cost-of-living relief rather than the structural change sought.
 - "Not reflected": nothing in the uploaded budget documents addresses this ask.
 - "Unclear": evidence exists but scope, mechanism or scale cannot be clearly reconciled with the ask without further review. Use sparingly — prefer one of the four above whenever the call is defensible.
+
+SCOPE CHECK — CRITICAL (apply before choosing "Directly reflected"):
+1. What is the ask's stated SCOPE? Read the ask text and its overarching category carefully. If the ask says "community service providers", "the community sector", "all aged care providers", "working age payments" or similar, the scope is BROAD. If the ask names a specific sub-sector or program ("aged care nurses", "Commonwealth Home Support Programme"), the scope is NARROW.
+2. Does the budget measure cover the WHOLE scope the ask names, or only a SUBSET?
+   - Whole scope + same mechanism + roughly the scale requested → Directly reflected.
+   - Same mechanism but only a subset of the scope (e.g. ask wants indexation for all community services, budget delivers indexation for aged care only) → Partially reflected.
+   - Different mechanism or only touches the same domain → Adjacent.
+3. A wage-cost flow-through or a Fair Work Commission pass-through is NOT the same as "adequate indexation of grant funding" unless the ask specifically names wage costs. Default to Partially reflected for narrower wage flow-throughs against broad indexation asks.
+4. An EXTENSION of an existing program (e.g. "$2.4m to extend the Care Together Program") is not equivalent to new capacity-building or transition funding for a whole sector. Default to Partially reflected at best; prefer Adjacent or Not reflected if the extension only serves a narrow sub-cohort of the ask's intended population.
+5. If you are tempted to use "Directly reflected" but the measure covers only a subset of the ask's named scope, step down to "Partially reflected".
 
 Rules:
 - Only cite evidence you can quote verbatim from the BUDGET EVIDENCE text above. Do not invent measures.
