@@ -634,7 +634,7 @@
   }
 </style>
 <!-- BUILD_STAMP: replaced with commit SHA at deploy time for cache-busting -->
-<script src="shared.js?v=67c17a4"></script>
+<script src="shared.js?v=BUILD_STAMP"></script>
 <script>
 // Early-run: if the URL carries a preset slug, tag <html> so CSS can hide the
 // tool underneath and show the welcome screen immediately — prevents any
@@ -691,7 +691,7 @@
   <div class="welcome-footer">
     <span class="welcome-footer-label">Powered by</span>
     <span class="welcome-footer-brand">PolicyPatch</span>
-    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build 67c17a4</span>
+    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build BUILD_STAMP</span>
   </div>
 </section>
 
@@ -1693,7 +1693,19 @@ function rowsFromExtraction(extracted) {
   if (!extracted || !Array.isArray(extracted.rows)) {
     throw new Error('Extraction response missing "rows" array.');
   }
-  return extracted.rows.map((r, i) => ({
+  // Final dedupe safety-net: catches duplicates from the single-chunk path
+  // and any survivors of cross-chunk dedupe (e.g. summary-list vs body
+  // copies of the same recommendation). Chunked path already dedupes, but
+  // running again is cheap and guarantees no org sees the same ask twice.
+  const seenAsk = new Set();
+  const uniqueRows = [];
+  for (const r of extracted.rows) {
+    const key = normAskForDedupe(r && r.ask);
+    if (!key || seenAsk.has(key)) continue;
+    seenAsk.add(key);
+    uniqueRows.push(r);
+  }
+  return uniqueRows.map((r, i) => ({
     id: i + 1,
     overarching: cleanOverarching(r.overarching),
     ask: cleanAskText(r.ask),
@@ -2234,30 +2246,36 @@ Return ONLY a JSON object matching this schema exactly:
   "nextBestThing": null OR { "title": "short name of the closest budget measure", "summary": "1-2 sentence plain-English summary of the closest thing in the budget to the intent of this ask (different mechanism, narrower cohort, adjacent problem area) and how it falls short", "source": "document name", "pdfPage": "page number as string", "quote": "verbatim snippet (1-2 sentences) from the budget text" }
 }
 
-Verdict definitions:
-- "Directly reflected": the budget contains a named measure that matches this ask on ALL THREE of scope, mechanism, and scale. Use this only when the match is strong and unambiguous across all three dimensions.
-- "Partially reflected": the budget contains a named measure that uses the same mechanism the ask proposes, but falls short on scope (narrower cohort or sector), scale (materially smaller funding), or is an extension rather than the expansion requested.
-- "Adjacent": the budget contains measures that address the same problem area but not the specific ask — different mechanism, different cohort, or cost-of-living relief rather than the structural change sought.
-- "Not reflected": nothing in the uploaded budget documents touches the ask's problem area, cohort, or intent at all. If ANY budget measure is in the same policy domain (aged care, CALD health, family violence, multicultural communities, etc.) — even if narrower, smaller, or a different mechanism — prefer "Adjacent" instead.
-- "Unclear": evidence exists but scope, mechanism or scale cannot be clearly reconciled with the ask without further review. Use sparingly — prefer one of the four above whenever the call is defensible.
+DOMAIN GATE — APPLY FIRST, before choosing a verdict:
+1. Identify the ask's policy domain (e.g. housing, aged care, First Nations, family/domestic/sexual violence, multicultural communities, gender equality, climate, cancer, child welfare, legal assistance, early childhood, international development/ODA, veterans, disability, etc.).
+2. Identify the ask's cohort and geography (who it serves and where): e.g. "Australian aged-care recipients", "people in developing countries", "First Nations children", "all Australians".
+3. CRITICAL: Domestic-only Australian measures (CEFC, Medicare, WGEA, domestic indexation, any measure serving Australian residents or industries) are NOT the same domain as an international ask (ODA, overseas development, foreign policy, Pacific/global climate finance, humanitarian aid to other countries). Likewise international-only measures are NOT the same domain as a domestic ask. Matching only on a shared topic word ("climate", "gender", "women") does NOT make two measures same-domain if one is domestic and the other international.
+4. Once domain + cohort are set, apply the verdict test below.
 
-SCOPE CHECK — CRITICAL (apply before choosing "Directly reflected"):
-1. What is the ask's stated SCOPE? Read the ask text and its overarching category carefully. If the ask says "community service providers", "the community sector", "all aged care providers", "working age payments" or similar, the scope is BROAD. If the ask names a specific sub-sector or program ("aged care nurses", "Commonwealth Home Support Programme"), the scope is NARROW.
-2. Does the budget measure cover the WHOLE scope the ask names, or only a SUBSET?
-   - Whole scope + same mechanism + roughly the scale requested → Directly reflected.
-   - Same mechanism but only a subset of the scope (e.g. ask wants indexation for all community services, budget delivers indexation for aged care only) → Partially reflected.
-   - Different mechanism or only touches the same domain → Adjacent.
-3. A wage-cost flow-through or a Fair Work Commission pass-through is NOT the same as "adequate indexation of grant funding" unless the ask specifically names wage costs. Default to Partially reflected for narrower wage flow-throughs against broad indexation asks.
-4. An EXTENSION of an existing program (e.g. "$2.4m to extend the Care Together Program") is not equivalent to new capacity-building or transition funding for a whole sector. Default to Partially reflected at best; prefer Adjacent or Not reflected if the extension only serves a narrow sub-cohort of the ask's intended population.
-5. If you are tempted to use "Directly reflected" but the measure covers only a subset of the ask's named scope, step down to "Partially reflected".
-6. DOMESTIC vs INTERNATIONAL: if the ask is about international aid, overseas development, foreign policy, global climate finance, Pacific/regional support, or any offshore commitment, a domestic-only measure (e.g. Clean Energy Finance Corporation, domestic green metals, Medicare, domestic services) does NOT qualify as Directly reflected — even if the policy area matches. Default to Adjacent or Not reflected. The reverse also applies: an international measure does not directly reflect a domestic ask.
+Verdict definitions:
+- "Directly reflected": named measure matches on ALL THREE of scope, mechanism, and scale. Strong and unambiguous.
+- "Partially reflected": same mechanism but falls short on scope, scale, or is an extension rather than the expansion requested.
+- "Adjacent": the budget contains a measure in the SAME policy domain (per the Domain Gate) serving a comparable or overlapping cohort, even if the mechanism is different, the cohort narrower, or the intent looser. Prefer this whenever the Domain Gate passes — it is the most common verdict for real submissions.
+- "Not reflected": use ONLY when BOTH tests below are true — otherwise the verdict is "Adjacent".
+    TEST 1 (domain): The closest budget measure you would cite in \`nextBestThing\` is NOT in the same policy domain as the ask (per the Domain Gate — remember domestic ≠ international).
+    TEST 2 (cohort/intent): That closest measure does NOT serve a comparable cohort, geography, or policy intent, even loosely.
+    If Test 1 = no OR Test 2 = no (i.e. there IS a same-domain, same-cohort measure), the verdict MUST be "Adjacent", not "Not reflected".
+    If both tests are true, "Not reflected" is correct. Populate \`nextBestThing\` with the closest-in-intent measure anyway (even if out of domain) so users see the nearest thing — and in \`nextBestThing.summary\` make clear the measure is out of domain / different cohort.
+- "Unclear": evidence exists but cannot be reconciled without further review. Use sparingly.
+
+SCOPE CHECK — applies to Directly reflected vs Partially reflected vs Adjacent (Adjacent vs Not reflected is handled by the Domain Gate + Not reflected tests above):
+1. What is the ask's stated SCOPE (broad vs narrow)? Read ask + overarching.
+2. Whole scope + same mechanism + roughly the scale → Directly. Subset only → Partial. Different mechanism / same domain → Adjacent.
+3. A wage-cost flow-through or Fair Work pass-through is NOT the same as "adequate indexation of grant funding" unless the ask names wage costs.
+4. An EXTENSION of an existing program is not equivalent to new capacity-building or sector-wide transition funding. Default Partial at best; Adjacent if only a narrow sub-cohort is served.
+5. If tempted to say "Directly reflected" but subset only → step down to Partial.
 
 Rules:
-- Only cite evidence you can quote verbatim from the BUDGET EVIDENCE text above. Do not invent measures.
-- If nothing in the budget touches the ask's policy domain at all, return "Not reflected" with an empty evidenceItems array. Otherwise prefer "Adjacent" and cite the closest measure in evidenceItems. "Not reflected" should be rare — most policy areas have at least a tangential budget line.
-- quote must be a verbatim snippet from the budget text, not a paraphrase.
-- nextBestThing: set to null UNLESS verdict is "Not reflected". When verdict is "Not reflected", try to find the single closest budget measure to the *intent* of the ask (adjacent problem area, different mechanism, narrower cohort, cost-of-living support covering a similar population, etc.) and populate nextBestThing with a short title, a 1-2 sentence plain-English summary of how it relates and where it falls short of the ask, plus a verbatim quote with source and page. If genuinely nothing in the budget comes close, set nextBestThing to null.
-- Return ONLY the JSON object. No prose, no code fences.`;
+- Only cite evidence you can quote verbatim from the BUDGET EVIDENCE. Do not invent measures.
+- "Not reflected" should be rare — reserved for asks where the budget truly has no same-domain, same-cohort measure (e.g. a domestic-only budget against an international ODA ask). Most asks will land at Adjacent.
+- quote must be verbatim.
+- nextBestThing: null UNLESS verdict is "Not reflected". When Not reflected, find the closest measure and populate. If truly nothing is close, null. If the closest measure is out of domain, say so in the summary.
+- Return ONLY the JSON object.`;
 }
 
 async function evaluateOneAsk(row, indexOrCorpus, signal, retryStatusFn) {
