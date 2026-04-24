@@ -28,7 +28,8 @@
     'Western Australia', 'Western Australian',
     'Northern Territory', 'ACT',
     'Aboriginal', 'Torres Strait Islander', 'First Nations', 'Indigenous',
-    'LGBTIQ+', 'LGBTIQ', 'LGBTQI+', 'LGBTQI',
+    'LGBTQIA+', 'LGBTQIA', 'LGBTIQA+', 'LGBTIQA',
+    'LGBTIQ+', 'LGBTIQ', 'LGBTQI+', 'LGBTQI', 'LGBT',
     'COVID', 'COVID-19'
   ];
 
