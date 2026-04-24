@@ -634,7 +634,7 @@
   }
 </style>
 <!-- BUILD_STAMP: replaced with commit SHA at deploy time for cache-busting -->
-<script src="shared.js?v=964eedb"></script>
+<script src="shared.js?v=BUILD_STAMP"></script>
 <script>
 // Early-run: if the URL carries a preset slug, tag <html> so CSS can hide the
 // tool underneath and show the welcome screen immediately — prevents any
@@ -691,7 +691,7 @@
   <div class="welcome-footer">
     <span class="welcome-footer-label">Powered by</span>
     <span class="welcome-footer-brand">PolicyPatch</span>
-    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build 964eedb</span>
+    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build BUILD_STAMP</span>
   </div>
 </section>
 
@@ -1841,21 +1841,62 @@ function updateEvaluateButtonState() {
   if (typeof updateStepper === 'function') updateStepper();
 }
 
+// Classify a document as "looks like a federal budget paper" vs "looks like a
+// pre-budget submission". Used to catch the common mistake of dropping the
+// submission PDF into the budget slot. Heuristic: submissions are dense with
+// "recommendation" / "we recommend" / "the Government should" language and
+// call themselves "pre-budget submission". Real budget papers say "Budget
+// Paper", "Treasurer", "Portfolio", "appropriation", "forward estimates".
+function classifyBudgetLikelihood(pages) {
+  const text = pages.map(p => p.text).join(' ').toLowerCase();
+  if (!text || text.length < 500) return { looksLikeBudget: false, reason: 'too little text' };
+  const budgetSignals = [
+    /\bbudget paper\b/, /\btreasurer\b/, /\bportfolio budget\b/,
+    /\bappropriation\b/, /\bforward estimates\b/, /\bmyefo\b/,
+    /\bbudget measures\b/, /\bthe government will provide\b/,
+    /\b(?:commonwealth|federal) budget\b/
+  ];
+  const submissionSignals = [
+    /\bpre-?budget submission\b/, /\bwe recommend(?:ation)?\b/,
+    /\bthe government should\b/, /\brecommendation\s*\d/,
+    /\bour recommendations?\b/
+  ];
+  const budgetHits = budgetSignals.reduce((n, re) => n + (re.test(text) ? 1 : 0), 0);
+  const submissionHits = submissionSignals.reduce((n, re) => n + (re.test(text) ? 1 : 0), 0);
+  if (budgetHits >= 2) return { looksLikeBudget: true };
+  if (submissionHits >= 2 && budgetHits === 0) {
+    return { looksLikeBudget: false, reason: 'looks like a pre-budget submission, not a budget paper' };
+  }
+  // Inconclusive — allow upload but flag.
+  return { looksLikeBudget: budgetHits > 0, reason: budgetHits === 0 ? 'no clear budget markers found' : null };
+}
+
 document.getElementById('budgetUpload').addEventListener('change', async (e) => {
   const files = Array.from(e.target.files || []);
   if (!files.length) return;
   try {
     setBudgetStatus(`Reading ${files.length} budget PDF${files.length === 1 ? '' : 's'}…`, 'working');
+    const rejected = [];
     for (const file of files) {
       setBudgetStatus(`Parsing "${file.name}"…`, 'working');
       const pages = await extractPdfText(file);
       const totalChars = pages.reduce((n, p) => n + p.text.length, 0);
+      const check = classifyBudgetLikelihood(pages);
+      if (!check.looksLikeBudget && check.reason && check.reason.includes('submission')) {
+        rejected.push({ name: file.name, reason: check.reason });
+        continue;
+      }
       // Replace any existing doc with same name
       const idx = budgetDocs.findIndex(d => d.name === file.name);
       const doc = { name: file.name, pages, totalChars };
       if (idx >= 0) budgetDocs[idx] = doc; else budgetDocs.push(doc);
     }
-    setBudgetStatus(`Loaded ${budgetDocs.length} doc${budgetDocs.length === 1 ? '' : 's'}.`, 'ok');
+    if (rejected.length) {
+      const names = rejected.map(r => `"${r.name}"`).join(', ');
+      setBudgetStatus(`Blocked: ${names} ${rejected.length === 1 ? 'looks' : 'look'} like a pre-budget submission, not a Federal Budget paper. Upload Budget Paper 2 (Budget Measures) or similar. Still loaded: ${budgetDocs.length} doc${budgetDocs.length === 1 ? '' : 's'}.`, 'error');
+    } else {
+      setBudgetStatus(`Loaded ${budgetDocs.length} doc${budgetDocs.length === 1 ? '' : 's'}.`, 'ok');
+    }
     updateEvaluateButtonState();
     if (typeof updateInsightsButtonState === 'function') updateInsightsButtonState();
   } catch (err) {
