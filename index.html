@@ -10,7 +10,7 @@
 <meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate" />
 <meta http-equiv="Pragma" content="no-cache" />
 <meta http-equiv="Expires" content="0" />
-<title>ACOSS Ask Register — Budget Alignment</title>
+<title>Budget Alignment Tool</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <!-- Inter only — confident sans-serif hero (weight 700) + regular body weights. -->
@@ -634,7 +634,7 @@
   }
 </style>
 <!-- BUILD_STAMP: replaced with commit SHA at deploy time for cache-busting -->
-<script src="shared.js?v=f26bab5"></script>
+<script src="shared.js?v=BUILD_STAMP"></script>
 <script>
 // Early-run: if the URL carries a preset slug, tag <html> so CSS can hide the
 // tool underneath and show the welcome screen immediately — prevents any
@@ -691,7 +691,7 @@
   <div class="welcome-footer">
     <span class="welcome-footer-label">Powered by</span>
     <span class="welcome-footer-brand">PolicyPatch</span>
-    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build f26bab5</span>
+    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build BUILD_STAMP</span>
   </div>
 </section>
 
@@ -3090,9 +3090,10 @@ const WORKER_BASE = GEMINI_ENDPOINT.replace(/\/+$/, '');
 
 function setWelcomeOrg(name) {
   const el = document.getElementById('welcomeOrg');
-  if (!el) return;
   const clean = (name || '').trim();
-  if (clean) el.textContent = clean;
+  if (el && clean) el.textContent = clean;
+  // Update the browser tab title so each org's link shows their name.
+  if (clean) document.title = clean + ' Budget Analysis';
 }
 
 // Federal Budget countdown — 12 May 2026, 7:30 PM Canberra time.
@@ -3192,7 +3193,7 @@ function showPresetBanner({ label, linkType, orgName, submissionName, banner, er
     tag.textContent = 'Link issue';
     tag.style.display = '';
     titleEl.textContent = error;
-    bodyEl.textContent = 'Upload the submission PDF manually below, or check the link with your ACOSS contact.';
+    bodyEl.textContent = 'Upload the submission PDF manually below, or check the link with your contact.';
     titleEl.dataset.preset = '1';
     bodyEl.dataset.preset = '1';
     return;

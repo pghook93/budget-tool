@@ -105,9 +105,12 @@
       /^(?:recommendation|rec\.?)\s*\d+\s*[:.\-\u2013\u2014)]?\s+/i,
       ''
     );
-    // Strip "Section 1:", "Part 2 -", "Chapter 3.", "Pillar 4:" style prefixes.
+    // Strip "Section 1:", "Part 2 -", "Chapter 3.", "Pillar 4:" style
+    // prefixes. Also matches letter ordinals ("Part A:", "Part B -") and
+    // Roman numerals ("Part III:", "Chapter IV"). The digit/letter block is
+    // optional so "Section:" on its own also gets stripped.
     out = out.replace(
-      /^(?:section|part|chapter|pillar|theme|priority|area)\s*\d+\s*[:.\-\u2013\u2014)]?\s+/i,
+      /^(?:section|part|chapter|pillar|theme|priority|area)(?:\s+(?:\d+|[ivxlcdm]+|[a-z]))?\s*[:.\-\u2013\u2014)]\s+/i,
       ''
     );
     // Strip leading ordinals: "2.", "3)", "4 -" AND bare "4 Expansion..."
