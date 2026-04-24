@@ -615,8 +615,8 @@
     .budget-countdown-unit{min-width:1.75rem}
   }
 </style>
-<!-- 20b6a33: replaced with commit SHA at deploy time for cache-busting -->
-<script src="shared.js?v=20b6a33"></script>
+<!-- BUILD_STAMP: replaced with commit SHA at deploy time for cache-busting -->
+<script src="shared.js?v=BUILD_STAMPBUILD_STAMP"></script>
 <script>
 // Early-run: if the URL carries a preset slug, tag <html> so CSS can hide the
 // tool underneath and show the welcome screen immediately — prevents any
@@ -686,7 +686,7 @@
   <div class="welcome-footer">
     <span class="welcome-footer-label">Powered by</span>
     <span class="welcome-footer-brand">PolicyPatch</span>
-    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build 20b6a33</span>
+    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build BUILD_STAMP</span>
   </div>
 </section>
 
@@ -2176,7 +2176,11 @@ async function evaluateOneAsk(row, indexOrCorpus, signal, retryStatusFn) {
     corpus = String(indexOrCorpus || '');
   }
   const prompt = enforcePromptCeiling(buildEvaluationPrompt(row.ask, row.overarching, corpus), 'Evaluation prompt');
-  const result = await geminiFetchWithRetry({ prompt, temperature: 0.1, signal }, retryStatusFn);
+  // Temperature 0 for evaluation — this is a classification task where the same
+  // ask + same budget text should produce the same verdict every run. Temp 0.1
+  // was still flipping ~40% of borderline verdicts between runs. Insights stays
+  // at 0.3 because it benefits from some diversity when surfacing measures.
+  const result = await geminiFetchWithRetry({ prompt, temperature: 0, signal }, retryStatusFn);
   return { result, coverage };
 }
 
