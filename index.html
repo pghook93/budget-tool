@@ -634,7 +634,7 @@
   }
 </style>
 <!-- BUILD_STAMP: replaced with commit SHA at deploy time for cache-busting -->
-<script src="shared.js?v=036b083"></script>
+<script src="shared.js?v=BUILD_STAMP"></script>
 <script>
 // Early-run: if the URL carries a preset slug, tag <html> so CSS can hide the
 // tool underneath and show the welcome screen immediately — prevents any
@@ -691,7 +691,7 @@
   <div class="welcome-footer">
     <span class="welcome-footer-label">Powered by</span>
     <span class="welcome-footer-brand">PolicyPatch</span>
-    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build 036b083</span>
+    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build BUILD_STAMP</span>
   </div>
 </section>
 
@@ -2185,6 +2185,7 @@ SCOPE CHECK — CRITICAL (apply before choosing "Directly reflected"):
 3. A wage-cost flow-through or a Fair Work Commission pass-through is NOT the same as "adequate indexation of grant funding" unless the ask specifically names wage costs. Default to Partially reflected for narrower wage flow-throughs against broad indexation asks.
 4. An EXTENSION of an existing program (e.g. "$2.4m to extend the Care Together Program") is not equivalent to new capacity-building or transition funding for a whole sector. Default to Partially reflected at best; prefer Adjacent or Not reflected if the extension only serves a narrow sub-cohort of the ask's intended population.
 5. If you are tempted to use "Directly reflected" but the measure covers only a subset of the ask's named scope, step down to "Partially reflected".
+6. DOMESTIC vs INTERNATIONAL: if the ask is about international aid, overseas development, foreign policy, global climate finance, Pacific/regional support, or any offshore commitment, a domestic-only measure (e.g. Clean Energy Finance Corporation, domestic green metals, Medicare, domestic services) does NOT qualify as Directly reflected — even if the policy area matches. Default to Adjacent or Not reflected. The reverse also applies: an international measure does not directly reflect a domestic ask.
 
 Rules:
 - Only cite evidence you can quote verbatim from the BUDGET EVIDENCE text above. Do not invent measures.
