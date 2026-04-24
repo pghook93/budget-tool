@@ -634,7 +634,7 @@
   }
 </style>
 <!-- BUILD_STAMP: replaced with commit SHA at deploy time for cache-busting -->
-<script src="shared.js?v=c9de1a2"></script>
+<script src="shared.js?v=BUILD_STAMP"></script>
 <script>
 // Early-run: if the URL carries a preset slug, tag <html> so CSS can hide the
 // tool underneath and show the welcome screen immediately — prevents any
@@ -691,7 +691,7 @@
   <div class="welcome-footer">
     <span class="welcome-footer-label">Powered by</span>
     <span class="welcome-footer-brand">PolicyPatch</span>
-    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build c9de1a2</span>
+    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build BUILD_STAMP</span>
   </div>
 </section>
 
@@ -2214,7 +2214,7 @@ Verdict definitions:
 - "Directly reflected": the budget contains a named measure that matches this ask on ALL THREE of scope, mechanism, and scale. Use this only when the match is strong and unambiguous across all three dimensions.
 - "Partially reflected": the budget contains a named measure that uses the same mechanism the ask proposes, but falls short on scope (narrower cohort or sector), scale (materially smaller funding), or is an extension rather than the expansion requested.
 - "Adjacent": the budget contains measures that address the same problem area but not the specific ask — different mechanism, different cohort, or cost-of-living relief rather than the structural change sought.
-- "Not reflected": nothing in the uploaded budget documents addresses this ask.
+- "Not reflected": nothing in the uploaded budget documents touches the ask's problem area, cohort, or intent at all. If ANY budget measure is in the same policy domain (aged care, CALD health, family violence, multicultural communities, etc.) — even if narrower, smaller, or a different mechanism — prefer "Adjacent" instead.
 - "Unclear": evidence exists but scope, mechanism or scale cannot be clearly reconciled with the ask without further review. Use sparingly — prefer one of the four above whenever the call is defensible.
 
 SCOPE CHECK — CRITICAL (apply before choosing "Directly reflected"):
@@ -2230,7 +2230,7 @@ SCOPE CHECK — CRITICAL (apply before choosing "Directly reflected"):
 
 Rules:
 - Only cite evidence you can quote verbatim from the BUDGET EVIDENCE text above. Do not invent measures.
-- If nothing addresses the ask, return verdict "Not reflected" and an empty evidenceItems array.
+- If nothing in the budget touches the ask's policy domain at all, return "Not reflected" with an empty evidenceItems array. Otherwise prefer "Adjacent" and cite the closest measure in evidenceItems. "Not reflected" should be rare — most policy areas have at least a tangential budget line.
 - quote must be a verbatim snippet from the budget text, not a paraphrase.
 - nextBestThing: set to null UNLESS verdict is "Not reflected". When verdict is "Not reflected", try to find the single closest budget measure to the *intent* of the ask (adjacent problem area, different mechanism, narrower cohort, cost-of-living support covering a similar population, etc.) and populate nextBestThing with a short title, a 1-2 sentence plain-English summary of how it relates and where it falls short of the ask, plus a verbatim quote with source and page. If genuinely nothing in the budget comes close, set nextBestThing to null.
 - Return ONLY the JSON object. No prose, no code fences.`;
