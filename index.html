@@ -2037,6 +2037,88 @@ function buildBudgetPageIndex() {
   return { pages, df, totalPages: pages.length };
 }
 
+// ---------------------------------------------------------------------------
+// Embedding retrieval (semantic). Calls the Worker's /embed/batch endpoint to
+// vectorise every budget page once, then uses cosine similarity against the
+// ask embedding to rank pages. This fixes the keyword failure mode where e.g.
+// a CRA ask surfaces Medicare pages because "rent" and "assistance" happen to
+// appear on Medicare pages too.
+//
+// Falls back to keyword TF-IDF scoring if any part of the embedding call fails
+// (network, Worker outage, Gemini rate-limit). Worker runs gemini-embedding-001
+// at 768-dim output; batch endpoint caps at 30 texts per request.
+// ---------------------------------------------------------------------------
+const EMBED_ENDPOINT = GEMINI_ENDPOINT.replace(/\/$/, '') + '/embed';
+const EMBED_BATCH_ENDPOINT = EMBED_ENDPOINT + '/batch';
+const EMBED_BATCH_SIZE = 30;      // matches Worker cap
+const EMBED_PAGE_CHAR_CAP = 12000; // ~3k tokens per page (defensive)
+
+function cosineSim(a, b) {
+  if (!a || !b || a.length !== b.length) return 0;
+  let dot = 0, na = 0, nb = 0;
+  for (let i = 0; i < a.length; i++) {
+    dot += a[i] * b[i];
+    na += a[i] * a[i];
+    nb += b[i] * b[i];
+  }
+  if (!na || !nb) return 0;
+  return dot / (Math.sqrt(na) * Math.sqrt(nb));
+}
+
+async function embedOneText(text) {
+  const res = await fetch(EMBED_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ text: String(text || '').slice(0, EMBED_PAGE_CHAR_CAP) }),
+  });
+  if (!res.ok) throw new Error(`embed single HTTP ${res.status}`);
+  const data = await res.json();
+  if (!Array.isArray(data.embedding)) throw new Error('embed: no vector in response');
+  return data.embedding;
+}
+
+async function embedBatchTexts(texts) {
+  const res = await fetch(EMBED_BATCH_ENDPOINT, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ texts: texts.map(t => String(t || '').slice(0, EMBED_PAGE_CHAR_CAP)) }),
+  });
+  if (!res.ok) throw new Error(`embed batch HTTP ${res.status}`);
+  const data = await res.json();
+  if (!Array.isArray(data.embeddings)) throw new Error('embed batch: no vectors in response');
+  return data.embeddings;
+}
+
+// Decorate an existing page index with per-page embedding vectors. Mutates
+// index.pages[i].embedding in place and sets index.hasEmbeddings = true.
+// Returns true on success, false on any failure (caller falls back to keyword).
+async function attachEmbeddingsToIndex(index, onProgress) {
+  try {
+    const pages = index.pages;
+    const total = pages.length;
+    for (let i = 0; i < total; i += EMBED_BATCH_SIZE) {
+      const batch = pages.slice(i, i + EMBED_BATCH_SIZE);
+      const texts = batch.map(p => `${p.docName} page ${p.pageNum}\n${p.text}`);
+      if (onProgress) {
+        const done = Math.min(i + batch.length, total);
+        onProgress(done, total);
+      }
+      const vectors = await embedBatchTexts(texts);
+      if (vectors.length !== batch.length) throw new Error(`embed batch returned ${vectors.length} vectors for ${batch.length} pages`);
+      for (let j = 0; j < batch.length; j++) {
+        batch[j].embedding = vectors[j];
+      }
+    }
+    index.hasEmbeddings = true;
+    return true;
+  } catch (err) {
+    console.warn('Embedding pre-compute failed, falling back to keyword retrieval:', err);
+    index.hasEmbeddings = false;
+    index.embeddingError = err.message || String(err);
+    return false;
+  }
+}
+
 function scorePagesForAsk(index, askText, overarchingText) {
   const queryTerms = [...new Set(
     [...tokenise(askText), ...tokenise(overarchingText)].filter(t => !STOPWORDS.has(t))
@@ -2056,11 +2138,24 @@ function scorePagesForAsk(index, askText, overarchingText) {
   return scored;
 }
 
+// Semantic scoring: embed the ask query, cosine-sim against each page vector.
+// Caller must have already populated index.pages[i].embedding via
+// attachEmbeddingsToIndex. Returns scored list in same shape as scorePagesForAsk.
+async function scorePagesForAskEmbedding(index, askText, overarchingText) {
+  const query = [overarchingText, askText].filter(Boolean).join('\n\n');
+  const qVec = await embedOneText(query);
+  return index.pages.map((p, i) => ({
+    page: p,
+    score: p.embedding ? cosineSim(qVec, p.embedding) : 0,
+    idx: i,
+  }));
+}
+
 // Build a corpus tailored to one ask. Always includes the first few pages of
 // each doc (overview/contents/summary) for context, then packs the highest-
 // scoring remaining pages until we hit maxChars. Pages are emitted in their
 // original order so the model sees coherent document flow.
-function buildRelevanceCorpus(index, askText, overarchingText, maxChars) {
+async function buildRelevanceCorpus(index, askText, overarchingText, maxChars) {
   const cap = maxChars || BUDGET_CORPUS_MAX_CHARS;
   const OVERVIEW_PAGES_PER_DOC = 3; // first 3 pages of each doc are auto-included
   const selected = new Set();
@@ -2080,7 +2175,20 @@ function buildRelevanceCorpus(index, askText, overarchingText, maxChars) {
   });
 
   // 2. Pack highest-scoring remaining pages until cap.
-  const scored = scorePagesForAsk(index, askText, overarchingText);
+  // Prefer semantic (embedding) scoring when the index has been embedded;
+  // fall back to keyword TF-IDF otherwise. Embedding fails silently back to
+  // keyword on per-ask network errors too.
+  let scored;
+  if (index.hasEmbeddings) {
+    try {
+      scored = await scorePagesForAskEmbedding(index, askText, overarchingText);
+    } catch (err) {
+      console.warn('Per-ask embedding query failed, falling back to keyword:', err);
+      scored = scorePagesForAsk(index, askText, overarchingText);
+    }
+  } else {
+    scored = scorePagesForAsk(index, askText, overarchingText);
+  }
   const remaining = scored
     .filter(s => !selected.has(s.idx) && s.score > 0)
     .sort((a, b) => b.score - a.score);
@@ -2386,7 +2494,7 @@ async function evaluateOneAsk(row, indexOrCorpus, signal, retryStatusFn) {
   // string (legacy fallback for when we only have one small doc).
   let corpus, coverage = null;
   if (indexOrCorpus && indexOrCorpus.pages) {
-    const built = buildRelevanceCorpus(indexOrCorpus, row.ask, row.overarching, BUDGET_CORPUS_MAX_CHARS);
+    const built = await buildRelevanceCorpus(indexOrCorpus, row.ask, row.overarching, BUDGET_CORPUS_MAX_CHARS);
     corpus = built.corpus;
     coverage = built.coverage;
   } else {
@@ -2481,7 +2589,19 @@ document.getElementById('evaluateBtn').addEventListener('click', async () => {
   if (useRelevance) {
     setEvalStatus(`Indexing ${totalPagesAll} budget pages for per-ask relevance scoring…`, 'working');
     pageIndex = buildBudgetPageIndex();
-    setEvalStatus(`Ready: ${rows.length} asks will each be evaluated against their most relevant pages from ${totalPagesAll} total budget pages (${totalRaw.toLocaleString()} chars). Every page is reachable for some ask.`, 'working');
+    // Pre-compute semantic embeddings for every page (once per session).
+    // This is the single biggest accuracy win: keyword scoring surfaced the
+    // wrong page in most of our prior failure cases. Fails gracefully to
+    // keyword if the Worker is unreachable.
+    setEvalStatus(`Computing semantic embeddings for ${totalPagesAll} budget pages (one-off, ~${Math.ceil(totalPagesAll / 30) * 2}s)…`, 'working');
+    const embedOk = await attachEmbeddingsToIndex(pageIndex, (done, total) => {
+      setEvalStatus(`Embedding budget pages: ${done}/${total}…`, 'working');
+    });
+    if (embedOk) {
+      setEvalStatus(`Ready: ${rows.length} asks will each be evaluated against their most relevant pages from ${totalPagesAll} total budget pages using semantic retrieval (${totalRaw.toLocaleString()} chars). Every page is reachable for some ask.`, 'working');
+    } else {
+      setEvalStatus(`Ready: ${rows.length} asks will each be evaluated against their most relevant pages from ${totalPagesAll} total budget pages using keyword retrieval (embedding service unavailable, ${totalRaw.toLocaleString()} chars). Every page is reachable for some ask.`, 'working');
+    }
   } else {
     sharedCorpus = buildBudgetCorpus();
     setEvalStatus(`Starting evaluation of ${rows.length} asks against ${sharedCorpus.length.toLocaleString()} chars of budget text…`, 'working');
