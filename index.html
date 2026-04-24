@@ -2278,6 +2278,109 @@ Rules:
 - Return ONLY the JSON object.`;
 }
 
+// ---------------------------------------------------------------------------
+// NR GATE — two-pass re-check for "Not reflected" verdicts.
+//
+// Validated on 419 asks across 25 orgs: catches ~60% of "technically correct
+// per the one-pass rubric but actually same-domain + same-cohort" NR verdicts
+// that should be Adjacent. Hard-stops on international-vs-domestic mismatches
+// so ODA asks with domestic next-best-things stay correctly NR.
+// ---------------------------------------------------------------------------
+function buildNrGatePrompt(ask, overarching, nextBestThing) {
+  const nb = nextBestThing || {};
+  return `You are the second pass of a two-pass verdict gate for an Australian Federal Budget submission analysis tool.
+
+The first pass chose "Not reflected" for this ask. Your job is to sanity-check that call.
+
+STEP 1 — INTERNATIONAL VS DOMESTIC HARD CHECK (apply this FIRST, before anything else):
+
+Determine whether the ASK is international-facing or domestic-facing:
+- INTERNATIONAL: the ask is about Overseas Development Assistance (ODA), the aid budget, foreign aid, Pacific/Indo-Pacific assistance, humanitarian aid overseas, international climate finance, global programs serving non-Australian populations, multilateral contributions, overseas NGO support programs (e.g. ANCP, Volunteers, Australian NGO Cooperation Program), international gender/climate adaptation for developing countries, or any programme whose beneficiaries live outside Australia.
+- DOMESTIC: the ask is about Australian residents, Australian services, Australian industries, Australian territory, or any programme whose beneficiaries live inside Australia.
+
+Determine whether the NEAREST BUDGET MEASURE is international-facing or domestic-facing using the same test.
+
+If the ask is INTERNATIONAL and the measure is DOMESTIC (or vice versa), YOU MUST KEEP NR. Set keep_nr=true. Do not proceed further. Examples of this hard stop:
+- Ask = "Increase the Gender Equality Fund (Australian aid overseas)" + Measure = "WGEA resourcing (Australian workplaces)" → KEEP NR.
+- Ask = "Pacific off-grid renewables partnership" + Measure = "CEFC recapitalisation (domestic renewables)" → KEEP NR.
+- Ask = "Climate adaptation fund for developing countries" + Measure = "Disaster Ready Fund (Australian disaster resilience)" → KEEP NR.
+- Ask = "Australian NGO Cooperation Program (ANCP) funding for overseas development NGOs" + Measure = "Housing Services Sector support (domestic)" → KEEP NR.
+
+A shared TOPIC WORD ("climate", "gender", "women", "NGO", "capacity building") is NOT enough to overcome the international/domestic mismatch. Topic similarity is irrelevant when geography/beneficiary differs.
+
+STEP 2 — DOMAIN + COHORT TEST (only if Step 1 does not trigger a hard stop):
+
+    The "Not reflected" verdict is valid ONLY if BOTH are true:
+      - TEST 1 (domain): the NEAREST budget measure is in a DIFFERENT policy domain from the ask (e.g. housing vs cancer; disability vs multicultural affairs; veterans vs education).
+      - TEST 2 (cohort): the NEAREST budget measure does NOT serve a comparable cohort or geography (e.g. First Nations children vs aged-care recipients; people with disability vs general population; refugees vs domestic violence victims).
+    If BOTH tests are true, "Not reflected" is CORRECT (keep_nr=true).
+    If EITHER test fails (domain is the same AND cohort overlaps), the correct verdict is "Adjacent" (keep_nr=false).
+
+CRITICAL: "Different mechanism" is NOT a reason to keep "Not reflected". If the ask and the nearest measure share a domain and cohort, the verdict is Adjacent even if the ask wants legislation and the budget provides operational funding, or the ask wants a tax reform and the budget provides a grant, or the ask wants a specific program that the budget didn't fund but the budget DID fund a different measure in the same domain for the same cohort, or the budget measure is narrower/smaller/falls short of what was asked.
+
+ALSO CRITICAL: "all Australians" or "the social sector" is NOT a valid cohort match for an ask targeting a specific group (people with disability, refugees, First Nations, aged care recipients, etc.). The cohort must genuinely overlap.
+
+BE CONSERVATIVE. Default to keep_nr=true when ambiguous. Only flip to keep_nr=false when you are confident both Step 1 passes AND Step 2's domain + cohort match.
+
+ASK:
+  Overarching theme: ${overarching || ''}
+  Recommendation: ${ask || ''}
+
+NEAREST BUDGET MEASURE (what the first pass identified as the closest thing):
+  Title: ${nb.title || ''}
+  Source: ${nb.source || ''} page ${nb.pdfPage || ''}
+  Quote: "${nb.quote || ''}"
+  Summary: ${nb.summary || ''}
+
+Return ONLY a JSON object in this exact schema:
+{
+  "keep_nr": true OR false,
+  "reason": "one short sentence (max 30 words) explaining your test-1/test-2 judgment",
+  "revised_plain_issue": "ONLY if keep_nr=false: 1-2 sentence plain-english explanation of how the nearest measure is in the same domain + cohort but doesn't match on mechanism/scale. Otherwise empty string."
+}
+
+Rules:
+- keep_nr=true means the NR verdict should stand.
+- keep_nr=false means the verdict should flip to Adjacent.
+- Be conservative. If unsure, keep_nr=true.
+- Return ONLY the JSON object. No prose, no code fences.`;
+}
+
+async function runNrGate(result, ask, overarching, signal) {
+  // Only runs when the first pass returned Not reflected + a populated nextBestThing.
+  // Returns { flipped: bool, gateResult: {...} | null }.
+  const nb = result && result.nextBestThing;
+  if (!nb || (!nb.summary && !nb.quote)) return { flipped: false, gateResult: null };
+  try {
+    const prompt = buildNrGatePrompt(ask, overarching, nb);
+    const gateRes = await geminiFetchWithRetry({ prompt, temperature: 0, signal });
+    if (!gateRes || gateRes.keep_nr !== false) return { flipped: false, gateResult: gateRes };
+    return { flipped: true, gateResult: gateRes };
+  } catch (_err) {
+    // On any gate error, default to keeping NR (safe default).
+    return { flipped: false, gateResult: null };
+  }
+}
+
+function applyNrGateFlip(result, gateRes) {
+  // Rewrite the evaluation result in place so downstream code treats it as Adjacent.
+  const nb = result.nextBestThing || {};
+  const revisedIssue = (gateRes && gateRes.revised_plain_issue) ? String(gateRes.revised_plain_issue).trim() : '';
+  const fallbackIssue = `The budget does not directly deliver this ask, but ${nb.title || 'a related measure'} is in the same policy domain and serves a comparable cohort. ${nb.summary || ''}`.trim();
+  result.verdict = 'Adjacent';
+  result.plainIssue = revisedIssue || fallbackIssue;
+  result.rule = `[Gate: promoted from Not reflected] ${(gateRes && gateRes.reason) ? gateRes.reason : 'same-domain, same-cohort measure exists with a different mechanism'}`;
+  result.evidenceItems = [{
+    source: nb.source || '',
+    pdfPage: nb.pdfPage || '',
+    quote: nb.quote || '',
+    identifier: nb.title || '',
+    note: '',
+  }];
+  result.nextBestThing = null;
+  return result;
+}
+
 async function evaluateOneAsk(row, indexOrCorpus, signal, retryStatusFn) {
   // indexOrCorpus can be either a relevance index (new path) or a plain corpus
   // string (legacy fallback for when we only have one small doc).
@@ -2295,6 +2398,13 @@ async function evaluateOneAsk(row, indexOrCorpus, signal, retryStatusFn) {
   // was still flipping ~40% of borderline verdicts between runs. Insights stays
   // at 0.3 because it benefits from some diversity when surfacing measures.
   const result = await geminiFetchWithRetry({ prompt, temperature: 0, signal }, retryStatusFn);
+  // NR Gate: if first pass said Not reflected but nearest-thing is in the
+  // same domain + cohort, promote to Adjacent. Conservative by default —
+  // hard-stops on international-vs-domestic mismatches.
+  if (result && result.verdict === 'Not reflected' && result.nextBestThing) {
+    const { flipped, gateResult } = await runNrGate(result, row.ask, row.overarching, signal);
+    if (flipped) applyNrGateFlip(result, gateResult);
+  }
   return { result, coverage };
 }
 
