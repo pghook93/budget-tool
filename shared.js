@@ -105,7 +105,15 @@
       /^(?:recommendation|rec\.?)\s*\d+\s*[:.\-\u2013\u2014)]?\s+/i,
       ''
     );
+    // Strip "Section 1:", "Part 2 -", "Chapter 3.", "Pillar 4:" style prefixes.
+    out = out.replace(
+      /^(?:section|part|chapter|pillar|theme|priority|area)\s*\d+\s*[:.\-\u2013\u2014)]?\s+/i,
+      ''
+    );
+    // Strip leading ordinals: "2.", "3)", "4 -" AND bare "4 Expansion..."
+    // (digit with only whitespace separator, no punctuation).
     out = out.replace(/^\d+\s*[.)\-\u2013\u2014:]\s*/, '');
+    out = out.replace(/^\d+\s+(?=[A-Za-z])/, '');
     out = out.replace(
       /^(?:our\s+|summary\s+of\s+|major\s+|key\s+)?recommendation[s:]*\s+(?:at\s+a\s+glance\s+)?/i,
       ''
