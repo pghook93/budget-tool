@@ -634,7 +634,7 @@
   }
 </style>
 <!-- BUILD_STAMP: replaced with commit SHA at deploy time for cache-busting -->
-<script src="shared.js?v=01e082d"></script>
+<script src="shared.js?v=BUILD_STAMP"></script>
 <script>
 // Early-run: if the URL carries a preset slug, tag <html> so CSS can hide the
 // tool underneath and show the welcome screen immediately — prevents any
@@ -691,7 +691,7 @@
   <div class="welcome-footer">
     <span class="welcome-footer-label">Powered by</span>
     <span class="welcome-footer-brand">PolicyPatch</span>
-    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build 01e082d</span>
+    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build BUILD_STAMP</span>
   </div>
 </section>
 
@@ -1847,25 +1847,49 @@ function updateEvaluateButtonState() {
 // "recommendation" / "we recommend" / "the Government should" language and
 // call themselves "pre-budget submission". Real budget papers say "Budget
 // Paper", "Treasurer", "Portfolio", "appropriation", "forward estimates".
-function classifyBudgetLikelihood(pages) {
+function classifyBudgetLikelihood(pages, filename) {
   const text = pages.map(p => p.text).join(' ').toLowerCase();
   if (!text || text.length < 500) return { looksLikeBudget: false, reason: 'too little text' };
-  const budgetSignals = [
-    /\bbudget paper\b/, /\btreasurer\b/, /\bportfolio budget\b/,
-    /\bappropriation\b/, /\bforward estimates\b/, /\bmyefo\b/,
-    /\bbudget measures\b/, /\bthe government will provide\b/,
-    /\b(?:commonwealth|federal) budget\b/
+  const fname = (filename || '').toLowerCase();
+  // Filename red flags — pre-budget submission patterns. Must be a submission
+  // unless the document body has overwhelming budget signals.
+  const filenameLooksLikeSubmission = /(\bpbs\b|pre-?budget|\bsubmission\b)/i.test(fname);
+  // "Hard" signals — language virtually unique to a real Budget Paper.
+  const hardBudgetSignals = [
+    /\bbudget paper\s*(?:no\.?\s*)?[0-9]/, /\bbudget measures\b/,
+    /\bportfolio budget statement/, /\bforward estimates\b/,
+    /\bpart\s+2\s*[:—-]\s*expense measures\b/,
+    /\bthe government will provide\b/, /\baffected programs?\b/,
+    /\bappropriation\b/, /\bmyefo\b/
+  ];
+  // Softer signals — present in both budgets and submissions.
+  const softBudgetSignals = [
+    /\btreasurer\b/, /\b(?:commonwealth|federal) budget\b/,
+    /\bbudget night\b/, /\boutcome\s+\d+\s*[:—-]/
   ];
   const submissionSignals = [
     /\bpre-?budget submission\b/, /\bwe recommend(?:ation)?\b/,
-    /\bthe government should\b/, /\brecommendation\s*\d/,
-    /\bour recommendations?\b/
+    /\bthe (?:australian )?government should\b/, /\brecommendation\s*\d/,
+    /\bour recommendations?\b/, /\bcalls on the government\b/,
+    /\burge[s]? the government\b/
   ];
-  const budgetHits = budgetSignals.reduce((n, re) => n + (re.test(text) ? 1 : 0), 0);
+  const hardHits = hardBudgetSignals.reduce((n, re) => n + (re.test(text) ? 1 : 0), 0);
+  const softHits = softBudgetSignals.reduce((n, re) => n + (re.test(text) ? 1 : 0), 0);
+  const budgetHits = hardHits + softHits;
   const submissionHits = submissionSignals.reduce((n, re) => n + (re.test(text) ? 1 : 0), 0);
-  if (budgetHits >= 2) return { looksLikeBudget: true };
-  if (submissionHits >= 2 && budgetHits === 0) {
+
+  // Filename strongly suggests submission — require overwhelming proof it's a real budget.
+  if (filenameLooksLikeSubmission && hardHits < 2) {
+    return { looksLikeBudget: false, reason: 'filename looks like a pre-budget submission (e.g. "PBS", "submission"), not a Federal Budget paper' };
+  }
+  // Need at least one "hard" Budget Paper marker — submissions rarely use this language.
+  if (hardHits === 0 && submissionHits >= 2) {
     return { looksLikeBudget: false, reason: 'looks like a pre-budget submission, not a budget paper' };
+  }
+  if (hardHits >= 2) return { looksLikeBudget: true };
+  if (hardHits >= 1 && budgetHits >= 3 && submissionHits <= 1) return { looksLikeBudget: true };
+  if (submissionHits >= 3 && hardHits < 2) {
+    return { looksLikeBudget: false, reason: 'reads like a pre-budget submission (recommendations to government), not a budget paper' };
   }
   // Inconclusive — allow upload but flag.
   return { looksLikeBudget: budgetHits > 0, reason: budgetHits === 0 ? 'no clear budget markers found' : null };
@@ -1881,7 +1905,7 @@ document.getElementById('budgetUpload').addEventListener('change', async (e) => 
       setBudgetStatus(`Parsing "${file.name}"…`, 'working');
       const pages = await extractPdfText(file);
       const totalChars = pages.reduce((n, p) => n + p.text.length, 0);
-      const check = classifyBudgetLikelihood(pages);
+      const check = classifyBudgetLikelihood(pages, file.name);
       if (!check.looksLikeBudget && check.reason && check.reason.includes('submission')) {
         rejected.push({ name: file.name, reason: check.reason });
         continue;
