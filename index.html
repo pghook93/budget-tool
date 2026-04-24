@@ -288,6 +288,19 @@
   .insights-group h3 .count-chip{font-size:var(--text-xs);font-weight:500;
     color:var(--text-muted);background:var(--surface-3,var(--surface-2));
     padding:.1rem .5rem;border-radius:999px;margin-left:.35rem}
+  /* Sub-groups by priority area within each category. Collapsible so users
+     can focus on one theme at a time. */
+  .insights-subgroup{margin:.5rem 0 .75rem;border-radius:10px;
+    background:rgba(255,255,255,.015);border:1px solid var(--border)}
+  .insights-subgroup>summary{padding:.55rem .85rem;cursor:pointer;
+    list-style:none;display:flex;align-items:center;gap:.5rem;
+    font-size:var(--text-sm);font-weight:600;user-select:none}
+  .insights-subgroup>summary::-webkit-details-marker{display:none}
+  .insights-subgroup>summary::after{content:"›";margin-left:auto;
+    color:var(--text-muted);transition:transform .15s ease}
+  .insights-subgroup[open]>summary::after{transform:rotate(90deg)}
+  .insights-subgroup-body{padding:.25rem .5rem .5rem}
+  .insights-subgroup-body .insight-card{margin-bottom:.4rem}
   .insight-card{padding:0;border-radius:14px;background:var(--surface-2);
     border:1px solid var(--border);margin-bottom:.5rem;overflow:hidden}
   .insight-card.risk{background:rgba(255,138,155,.06);border-color:rgba(255,138,155,.3)}
@@ -586,17 +599,21 @@
   .welcome-footer-brand{font-size:var(--text-xl);font-weight:700;color:var(--accent);
     letter-spacing:-.015em;font-family:'Inter','Helvetica Neue',Arial,sans-serif}
 
-  /* Live countdown to Federal Budget — anchored top-right, understated so it
-     doesn't fight the hero title. Numbers use tabular figures so the layout
-     doesn't jitter as values tick. */
-  .budget-countdown{position:fixed;top:clamp(1.25rem,3vh,2rem);
-    right:clamp(1.25rem,3vw,2rem);display:flex;flex-direction:column;
-    align-items:flex-end;gap:.3rem;z-index:60;
-    padding:.7rem .95rem;border-radius:var(--radius-md);
+  /* Live countdown to Federal Budget. On the welcome screen the countdown is
+     fixed in the top-right viewport corner. On the main tool view it flows
+     inline at the top of the shell so it respects page padding and never
+     overlaps the stepper or any card content, regardless of viewport size. */
+  .budget-countdown{display:flex;flex-direction:column;align-items:flex-end;
+    gap:.3rem;padding:.65rem .9rem;border-radius:var(--radius-md);
     background:hsla(222,35%,10%,0.55);border:1px solid hsla(0,0%,100%,0.10);
     backdrop-filter:blur(10px) saturate(130%);
     -webkit-backdrop-filter:blur(10px) saturate(130%);
-    max-width:calc(100vw - 2rem);box-sizing:border-box}
+    box-sizing:border-box;width:max-content;max-width:calc(100vw - 3rem);
+    margin:0 0 1rem auto;position:relative;z-index:5}
+  /* While the welcome overlay is active, lift the countdown to a fixed
+     top-right position so it sits above the hero and stays visible. */
+  html.welcome-active .budget-countdown{position:fixed;top:1.5rem;right:1.5rem;
+    margin:0;z-index:60}
   .budget-countdown-label{font-size:var(--text-2xs);text-transform:uppercase;
     letter-spacing:.18em;color:var(--accent);font-weight:600;line-height:1}
   .budget-countdown-timer{display:flex;gap:.55rem;align-items:flex-end;
@@ -610,13 +627,14 @@
   @media (max-width:560px){
     .welcome-cta{padding:.9rem 2.2rem;font-size:var(--text-base)}
     .welcome-footer{bottom:1.5rem}
-    .budget-countdown{top:.85rem;right:.85rem;padding:.55rem .7rem}
+    html.welcome-active .budget-countdown{top:.85rem;right:.85rem;padding:.55rem .7rem}
+    .budget-countdown{padding:.55rem .7rem}
     .budget-countdown-num{font-size:var(--text-base)}
     .budget-countdown-unit{min-width:1.75rem}
   }
 </style>
-<!-- 85bad9e: replaced with commit SHA at deploy time for cache-busting -->
-<script src="shared.js?v=85bad9e85bad9e"></script>
+<!-- BUILD_STAMP: replaced with commit SHA at deploy time for cache-busting -->
+<script src="shared.js?v=BUILD_STAMPBUILD_STAMP"></script>
 <script>
 // Early-run: if the URL carries a preset slug, tag <html> so CSS can hide the
 // tool underneath and show the welcome screen immediately — prevents any
@@ -656,19 +674,6 @@
   </aside>
 </div>
 
-<!-- Live countdown to Federal Budget: 12 May 2026, 7:30 PM AEST (09:30 UTC).
-     Lives at the top level so it stays visible on both the welcome screen
-     and the main tool screen. Fixed-position, top-right. -->
-<div class="budget-countdown" id="budgetCountdown" aria-live="polite">
-  <span class="budget-countdown-label" id="budgetCountdownLabel">Budget dropping in…</span>
-  <div class="budget-countdown-timer" id="budgetCountdownTimer">
-    <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="days">—</span><span class="budget-countdown-sub">days</span></div>
-    <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="hours">—</span><span class="budget-countdown-sub">hrs</span></div>
-    <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="minutes">—</span><span class="budget-countdown-sub">min</span></div>
-    <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="seconds">—</span><span class="budget-countdown-sub">sec</span></div>
-  </div>
-</div>
-
 <!-- Welcome landing screen. Shown only when a preset slug is in the URL and
      the hydration call succeeds with an org name. Dismissed by the Ready? CTA. -->
 <section class="welcome-screen" id="welcomeScreen" aria-labelledby="welcomeTitle">
@@ -686,7 +691,7 @@
   <div class="welcome-footer">
     <span class="welcome-footer-label">Powered by</span>
     <span class="welcome-footer-brand">PolicyPatch</span>
-    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build 85bad9e</span>
+    <span style="display:block;margin-top:.4rem;font-size:var(--text-2xs);color:var(--text-muted);letter-spacing:.08em">build BUILD_STAMP</span>
   </div>
 </section>
 
@@ -703,6 +708,19 @@
   </div>
 </div>
 <div class="shell">
+
+  <!-- Live countdown to Federal Budget: 12 May 2026, 7:30 PM AEST (09:30 UTC).
+       Flows inline at the top-right of the shell on the main view; CSS lifts it
+       to a fixed top-right position while the welcome overlay is active. -->
+  <div class="budget-countdown" id="budgetCountdown" aria-live="polite">
+    <span class="budget-countdown-label" id="budgetCountdownLabel">Budget dropping in…</span>
+    <div class="budget-countdown-timer" id="budgetCountdownTimer">
+      <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="days">—</span><span class="budget-countdown-sub">days</span></div>
+      <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="hours">—</span><span class="budget-countdown-sub">hrs</span></div>
+      <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="minutes">—</span><span class="budget-countdown-sub">min</span></div>
+      <div class="budget-countdown-unit"><span class="budget-countdown-num" data-unit="seconds">—</span><span class="budget-countdown-sub">sec</span></div>
+    </div>
+  </div>
 
   <section class="card card-pad">
     <h1 id="pageTitle" class="hero-title">Budget Night Helper</h1>
@@ -1360,6 +1378,7 @@ Return ONLY a JSON object matching this schema exactly:
 Rules:
 - Extract EVERY formal recommendation, ask, or call-to-action in the submission (typically marked "Recommendation", "We recommend", "The Government should", major bullet asks, or listed under "Major Recommendations"/"Key Asks").
 - "ask" must be a direct verbatim quote. Do not summarise, shorten, or rewrite. EXCEPTION: strip trailing or inline footnote markers (e.g. superscript numbers like "19" at end of sentence, or "page 9 4" artefacts from PDF extraction) and parenthetical cross-references (e.g. "(See also: 'Value the community sector' on page 9 4.)"). Keep the substantive policy text intact — only remove these pagination/reference artefacts.
+- If a recommendation ends with a colon followed by a bulleted or numbered list of sub-items (e.g. "...fund the following: • item A • item B • item C"), you MUST inline those bullets into the verbatim ask text, joined as a complete sentence with commas and "and" (e.g. "...fund the following: item A, item B, and item C."). Never truncate the ask at the colon — the sub-items are part of the substantive policy content. If bullets are not feasible to inline (very long multi-paragraph sub-items), summarise them inside the ask field as "...including [brief summary of sub-items]" rather than dropping them.
 - "askShort" is for readability in a summary table only. Include it ONLY when the verbatim ask exceeds 50 words. Capture the core action and intent; do not add opinion or explanation. The full verbatim "ask" is used for AI evaluation — never drop detail from "ask" itself.
 - "overarching" must be a verbatim heading from the document. Lines prefixed with [H1] or [H2] in the submission text below are headings detected by font size — [H1] is a larger chapter-level title, [H2] is a narrower section heading. Prefer the nearest preceding [H2] as the overarching category (it is the more specific one). If no [H2] precedes the ask, use the nearest preceding [H1]. Never invent or paraphrase a category label; if neither precedes the ask, use "Uncategorised". IMPORTANT: if the nearest heading is a generic list/summary label like "Recommendations", "Our recommendations", "Recommendations at a glance", "Key asks", "Summary of recommendations", or "Major recommendations", that is a CONTAINER for the whole list — skip it and use the NEXT preceding heading instead (which will be the actual policy theme like "Housing and homelessness", "Income support", etc.). Also strip any leading "Recommendations" / "Recommendation:" prefix from the heading text itself if present.
 - "askPage" = the page number where the recommendation is discussed in substance. If the same recommendation appears in both a summary/"at a glance" list AND in a later body section that explains it, use the body section page (the fuller treatment), not the summary page. If it only appears in the summary, use that page.
@@ -2711,7 +2730,7 @@ FIELD RULES:
 - title: short name of the measure.
 - amount: dollar figure as written (e.g. "$50.0 million over 4 years"), or "not costed". MUST match a figure in the quote. If a heading figure and a sentence figure disagree, use the sentence figure.
 - source + pdfPage: exact document name and page from the === markers in the budget evidence.
-- priorityArea: short phrase naming which of the organisation's strategic priorities this touches or threatens.
+- priorityArea: a SHORT (2-4 word) category label, title case, that this measure falls under. Examples: "Housing", "Mental health", "First Nations", "Employment", "Child protection". Be consistent across items — reuse the same label for related measures so they group together. Never a full sentence or long phrase.
 - summary: ONE sentence, max 30 words.
 - whyItMatters: ONE sentence, max 30 words, on why this matters to the organisation's strategy.
 - quote: ONE verbatim descriptive sentence from the budget text (15-40 words, contains a verb and describes what the measure does). Never use a heading, program name, or short title fragment. Omit the field if no such sentence exists.
@@ -2785,23 +2804,48 @@ function renderInsights(data) {
     `;
   }
 
+  // Group cards by priorityArea within each category so users can scan by
+  // theme (e.g. "Housing", "Mental Health") rather than a long flat list.
+  // The AI produces inconsistent casing/phrasing, so normalise the key while
+  // preserving the first-seen label for display.
+  function groupByPriority(items) {
+    const groups = new Map();
+    for (const it of items) {
+      const raw = (it.priorityArea || 'Other').trim();
+      const key = raw.toLowerCase().replace(/\s+/g, ' ');
+      if (!groups.has(key)) groups.set(key, { label: raw, items: [] });
+      groups.get(key).items.push(it);
+    }
+    // Sort groups largest-first for visual density; single-item groups drift
+    // to the bottom but stay visible.
+    return Array.from(groups.values()).sort((a, b) => b.items.length - a.items.length);
+  }
+
+  function renderCategory(items, kind, heading, extraClass) {
+    if (!items.length) return '';
+    const groups = groupByPriority(items);
+    const groupsHtml = groups.map(g => `
+      <details class="insights-subgroup" open>
+        <summary class="insights-subgroup-head">
+          <span>${escapeHtml(g.label)}</span>
+          <span class="count-chip">${g.items.length}</span>
+        </summary>
+        <div class="insights-subgroup-body">
+          ${g.items.map(it => cardHtml(it, kind)).join('')}
+        </div>
+      </details>
+    `).join('');
+    return `
+      <div class="insights-group ${extraClass || ''}">
+        <h3>${heading}<span class="count-chip">${items.length}</span></h3>
+        ${groupsHtml}
+      </div>
+    `;
+  }
+
   const sections = [];
-  if (priorities.length) {
-    sections.push(`
-      <div class="insights-group">
-        <h3>Areas of interest<span class="count-chip">${priorities.length}</span></h3>
-        ${priorities.map(p => cardHtml(p, 'priority')).join('')}
-      </div>
-    `);
-  }
-  if (risks.length) {
-    sections.push(`
-      <div class="insights-group is-risks">
-        <h3>Risks<span class="count-chip">${risks.length}</span></h3>
-        ${risks.map(r => cardHtml(r, 'risk')).join('')}
-      </div>
-    `);
-  }
+  sections.push(renderCategory(priorities, 'priority', 'Areas of interest', ''));
+  sections.push(renderCategory(risks, 'risk', 'Risks', 'is-risks'));
 
   body.innerHTML = sections.join('');
   card.style.display = '';

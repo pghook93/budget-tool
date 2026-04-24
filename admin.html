@@ -175,6 +175,7 @@
       <div class="row-wrap" style="margin-bottom:.5rem">
         <input id="editSubmissionFile" type="file" accept="application/pdf" />
         <button id="extractBtn" class="btn btn-primary">Extract asks from PDF</button>
+        <button id="clearSubmissionBtn" class="btn btn-sm btn-danger" title="Clear the loaded file and remove all extracted rows">Clear submission</button>
         <span id="editSubmissionName" class="muted"></span>
       </div>
       <div id="extractStatus" class="status"></div>
@@ -771,6 +772,23 @@ async function callGeminiWithRetry(prompt, onTick) {
   }
   throw lastErr || new Error('Extraction failed after retries.');
 }
+
+document.getElementById('clearSubmissionBtn').addEventListener('click', () => {
+  if (!editorState) return;
+  const hasRows = editorState.rows && editorState.rows.length;
+  const hasFile = editorState.submissionName || (document.getElementById('editSubmissionFile').files || []).length;
+  if (!hasRows && !hasFile) {
+    setStatus('extractStatus', 'Nothing to clear.', 'ok');
+    return;
+  }
+  if (!confirm('Clear the loaded submission and remove all extracted rows? This only affects the editor — nothing is saved until you click "Save preset".')) return;
+  editorState.rows = [];
+  editorState.submissionName = '';
+  document.getElementById('editSubmissionFile').value = '';
+  document.getElementById('editSubmissionName').textContent = '';
+  setStatus('extractStatus', 'Cleared. Upload a new PDF and click "Extract asks from PDF" to replace.', 'ok');
+  renderEditorRows();
+});
 
 document.getElementById('extractBtn').addEventListener('click', async () => {
   const fileInput = document.getElementById('editSubmissionFile');
